@@ -1,5 +1,9 @@
 <!doctype html>
 <html lang="ru">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f9f9f9"><title>КРОК · Карта контактов</title><link rel="stylesheet" href="/styles.css"></head>
-<body><main id="viewport"><div id="app" aria-live="polite"></div></main><div id="notice" role="status" hidden></div><dialog id="dialog"></dialog><script type="module" src="/app.js"></script></body>
-</html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>Карта ЛПР</title><link rel="stylesheet" href="/ui-assets/styles.css"><script src="/ui-assets/icons.js" defer></script><script src="/ui-assets/app.js" defer></script></head>
+<body>
+<main id="app" aria-live="off"><div class="startup">Загрузка карты…</div></main>
+<nav id="dock" class="dock" aria-label="Разделы приложения"></nav>
+<dialog id="dialog"><div class="dialog-head"><h2 id="dialog-title"></h2><button type="button" class="icon-button" data-close aria-label="Закрыть">×</button></div><div id="dialog-content"></div></dialog>
+<div id="toast" role="status" aria-live="polite"></div>
+</body></html>
