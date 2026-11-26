@@ -12,7 +12,13 @@ BASE = '/api/v1/clients/krasnodar'
 def test_frontend_and_assets_do_not_expose_server_files(tmp_path):
     with TestClient(create_app(tmp_path/'test.db', keys=KEYS, run_worker=False)) as c:
         assert c.get('/').status_code == 200
-        assert 'src="/app.js"' in c.get('/').text
+        assert 'src="/ui-assets/app.js"' in c.get('/').text
+        assert 'src="/app.js"' in c.get('/legacy.html').text
+        for path in ('/ui-assets/app.js', '/ui-assets/styles.css', '/ui-assets/icons.js',
+                     '/ui-assets/brands/vtb.svg', '/ui-assets/brands/mvideo.svg', '/ui-assets/brands/s7.svg'):
+            assert c.get(path).status_code == 200
+        assert '<div class="graph-tools">' not in c.get('/ui-assets/app.js').text
+        assert 'scrollbar-width:none' in c.get('/ui-assets/styles.css').text
         assert c.get('/api/v1/clients').status_code == 401
         assert c.get('/api/v1/missing').status_code == 404
         for path in ('/.env', '/app/main.py', '/data/krok.db', '/.git/config'):
