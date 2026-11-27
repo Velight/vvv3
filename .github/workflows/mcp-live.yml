@@ -1,0 +1,47 @@
+name: Live Render MCP check
+on:
+  push:
+    paths:
+      - '.github/workflows/mcp-live.yml'
+      - 'app/mcp_server.py'
+      - 'app/main.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify public MCP on Render
+        run: |
+          python - <<'PY'
+          import urllib.request, urllib.error, json, time
+          base = 'https://vvv3.onrender.com'
+          def call(method, params, origin=None):
+              headers = {'Accept':'application/json, text/event-stream','Content-Type':'application/json'}
+              if origin: headers['Origin'] = origin
+              req = urllib.request.Request(base+'/mcp-demo/', data=json.dumps({'jsonrpc':'2.0','id':1,'method':method,'params':params}).encode(), headers=headers)
+              try:
+                  with urllib.request.urlopen(req,timeout=45) as r:
+                      data = json.loads(r.read())
+                      print(method, origin, r.status, 'result keys:', list(data.get('result',{})), flush=True)
+                      return data['result']
+              except urllib.error.HTTPError as e:
+                  print(method,origin,e.code,e.read().decode()[:300],flush=True)
+                  raise
+          for i in range(3):
+              try:
+                  result=call('initialize', {'protocolVersion':'2025-03-26','capabilities':{},'clientInfo':{'name':'live-check','version':'1'}})
+                  print('Server:',result.get('serverInfo'),flush=True)
+                  tools=call('tools/list',{})['tools']
+                  print('Tools:',[x['name'] for x in tools],flush=True)
+                  assert len(tools)==8
+                  assert not call('tools/call',{'name':'list_clients','arguments':{}}).get('isError')
+                  call('tools/list',{},'https://chatgpt.com')
+                  break
+              except Exception as e:
+                  print('Attempt',i+1,repr(e),flush=True)
+                  if i==2: raise
+                  time.sleep(10)
+          PY

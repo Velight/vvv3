@@ -39,6 +39,7 @@ with sync_playwright() as p:
     page.wait_for_function("document.querySelector('#agent-status').textContent.includes('401')")
     page.get_by_role('button',name='Закрыть',exact=True).click()
     page.set_viewport_size({'width':390,'height':844})
+    page.locator('[data-action="mobile-assistant"]').click()
     assert page.get_by_role('button',name='Подключить своего агента').is_visible()
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     if os.getenv('COPILOT_SCREENSHOT'):

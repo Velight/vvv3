@@ -68,6 +68,8 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
     )
 
     mcp_server, mcp_app = create_mcp(f, keys)
+    # The jury reads the same live demo clients as the web UI, with no write access.
+    demo_server, demo_app = create_mcp(f, {}, public_demo=True)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -84,7 +86,7 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
         h = asyncio.Event()
         i = asyncio.create_task(worker(f, ai, h)) if run_worker else None
         try:
-            async with mcp_server.session_manager.run():
+            async with mcp_server.session_manager.run(), demo_server.session_manager.run():
                 yield
         finally:
             h.set()
@@ -555,6 +557,7 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
             "messages": i,
         }
 
+    a.mount("/mcp-demo", demo_app)
     a.mount("/mcp", mcp_app)
 
     # Register after API routes so unknown /api URLs never receive index.html.

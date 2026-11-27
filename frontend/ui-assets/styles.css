@@ -60,6 +60,83 @@ dialog{width:min(470px,92vw);max-height:85dvh;border:1px solid var(--edge);borde
 @media(max-width:700px){.timeline{margin-bottom:55px;gap:8px}}
 @media(prefers-reduced-motion:reduce){.graph .person{transition:none}}
 
+/* Prevent collapsed top margins from creating an empty page scroll range. Keep scrolling available on small screens. */
+#app{display:flow-root}
+html{scrollbar-width:none;-ms-overflow-style:none}
+html::-webkit-scrollbar{display:none;width:0;height:0}
+
+/* Phone-first presentation; all desktop layout and graph reconciliation remain unchanged. */
+.mobile-map-heading,.mobile-panel-tabs,.mobile-graph-controls,.mobile-shade{display:none}
+@media(max-width:700px){
+ :root{--s:1px}
+ body{min-height:100dvh}
+ .clients{margin:18px 14px calc(96px + env(safe-area-inset-bottom));gap:12px}
+ .client-card{height:156px;padding:17px;border-radius:22px}
+ .client-card:hover{transform:none}
+ .client-head{gap:4px 8px;padding-right:82px}
+ .client-name{font-size:19px;line-height:1.2}
+ .count{font-size:14px}
+ .coverage{width:63%}
+ .coverage-label{gap:8px;font-size:12px}
+ .card-arrow{right:16px;bottom:11px}
+ .dock{bottom:calc(12px + env(safe-area-inset-bottom));height:56px;width:min(280px,calc(100vw - 32px));z-index:10}
+ .dock button{min-height:44px}
+ .map-screen{display:flex;flex-direction:column;align-items:stretch;gap:12px;min-height:100dvh;padding:calc(10px + env(safe-area-inset-top)) 12px calc(92px + env(safe-area-inset-bottom))}
+ .topbar{position:relative;inset:auto;order:0;gap:6px;min-height:46px}
+ .topbar .icon-button{width:44px;height:44px;flex-shrink:0;padding:11px}
+ .segmented{position:static;transform:none;min-width:0;flex:1;justify-content:center;gap:1px}
+ .segmented button{min-width:0;flex:1;padding:10px 6px;min-height:40px;font-size:12px}
+ .mobile-map-heading{display:flex;order:1;align-items:baseline;justify-content:space-between;gap:8px;padding:0 6px}
+ .mobile-map-heading h1{font-size:21px;letter-spacing:-.03em;line-height:1.2;margin:0}
+ .mobile-map-heading span{font-size:12px;color:var(--muted);white-space:nowrap}
+ .graph-area{order:2;display:flex;justify-content:flex-start;aspect-ratio:auto;height:auto;min-height:0;overflow:hidden;background:white;border-radius:24px;padding:8px;gap:8px}
+ .scope-picker{position:static;transform:none;width:100%;max-width:100%;text-align:center}
+ .scope-picker select{font-size:16px;max-width:100%;min-height:42px}
+ #graph-content{height:clamp(280px,43dvh,430px)!important;width:100%!important;overflow:auto;overscroll-behavior:contain;scrollbar-width:none;position:relative;touch-action:pan-x pan-y}
+ #graph-content::-webkit-scrollbar{display:none}
+ #graph-content .graph{width:calc(100% * var(--mobile-zoom,1.5));height:auto;min-height:100%;aspect-ratio:4/3;max-width:none;overflow:visible}
+ .graph .edge{pointer-events:stroke}
+ .graph .node-name{font-size:11px}
+ .graph .node-dept{font-size:9.5px}
+ .mobile-graph-controls{display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%}
+ .mobile-graph-controls button{min-height:44px;background:var(--bg);border-radius:999px;font-size:13px;padding:0 12px}
+ .mobile-zoom{display:flex;gap:3px}
+ .mobile-zoom button{min-width:40px;font-size:19px;padding:0 8px}
+ .mobile-zoom button:nth-child(2){font-size:12px}
+ .empty-map{top:50%;left:10%;right:10%}
+ .timeline{order:3;position:relative;inset:auto;margin:0 0 24px;gap:8px;min-height:44px}
+ .timeline button{width:36px;height:44px;padding:6px;flex:none}
+ .timeline input{min-width:0;flex:1;height:12px}
+ .timeline input::-webkit-slider-thumb{width:28px;height:28px}
+ .timeline-label{top:45px;font-size:11px}
+ .mobile-panel-tabs{order:4;display:flex;gap:8px}
+ .mobile-panel-tabs button{flex:1;background:white;border-radius:999px;min-height:48px;font-weight:700;font-size:14px;border:1px solid var(--edge)}
+ .mobile-panel-tabs button[data-action="mobile-assistant"]{background:var(--ink);color:white}
+ .map-screen .panel{display:none;position:fixed;z-index:22;left:0;right:0;bottom:0;margin:0;height:min(75dvh,640px);min-height:0;max-height:calc(100dvh - 24px);width:100%;border-radius:26px 26px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom));box-shadow:0 -8px 36px #0001}
+ .map-screen[data-mobile-panel="assistant"] .assistant-panel,.map-screen[data-mobile-panel="contact"] .contact-panel{display:flex}
+ .map-screen[data-mobile-panel="assistant"] .mobile-shade,.map-screen[data-mobile-panel="contact"] .mobile-shade{display:block;position:fixed;inset:0;background:#0b0d1050;z-index:21;border-radius:0}
+ body:has(.map-screen[data-mobile-panel="assistant"]),body:has(.map-screen[data-mobile-panel="contact"]){overflow:hidden}
+ .panel-heading{font-size:15px;margin-bottom:12px}
+ .panel-heading button{width:44px;height:44px;border-radius:50%;background:var(--bg)}
+ .panel-heading button svg{width:20px;height:20px;transform:rotate(180deg)}
+ .contact-body{font-size:15px;overscroll-behavior:contain}
+ .contact-body h2{font-size:21px}
+ .contact-body .section-label,.contact-body .section-label:first-of-type{margin-top:18px;font-size:13px}
+ .contact-actions .pill,.dialog-actions .pill{min-height:46px}
+ .chat-log{font-size:15px;overscroll-behavior:contain;scrollbar-width:none}
+ .chat-form{min-height:50px;padding:4px 8px}
+ .chat-form input,.dialog-form input,.dialog-form textarea,.dialog-form select{font-size:16px}
+ .chat-form button{width:44px;height:44px;flex-shrink:0}
+ .chat-form svg{width:20px;height:20px}
+ .more{min-height:44px;font-size:13px}
+ dialog{width:calc(100% - 24px);max-height:calc(100dvh - 32px);padding:18px;border-radius:24px;overscroll-behavior:contain}
+ .dialog-head .icon-button{min-width:44px;min-height:44px}
+ .dialog-form input,.dialog-form select{min-height:46px}
+ .mobile-person-choice{text-align:left;display:flex;flex-direction:column;gap:3px;min-height:56px}
+ #toast{bottom:calc(80px + env(safe-area-inset-bottom));z-index:32}
+}
+@media(max-width:360px){.client-name{font-size:17px}.client-head{padding-right:70px}.brand{right:13px}.mobile-map-heading h1{font-size:18px}.mobile-graph-controls button{padding:0 8px}.segmented button{font-size:11px}}
+
 .assistant-tools{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px}
 .assistant-tools .pill,.agent-connect{min-height:28px;font-size:11px;padding:5px 9px}
 .agent-connect{margin-bottom:10px;flex-shrink:0}

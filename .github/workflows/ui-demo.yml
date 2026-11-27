@@ -2,6 +2,8 @@ name: UI screenshots and interaction
 on:
   push:
     branches: [frontend-pr2, main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
@@ -18,7 +20,9 @@ jobs:
           pip install -r requirements.txt playwright pytest
           python -m playwright install --with-deps chromium
       - name: API and frontend tests
-        run: python -m pytest -q tests/test_frontend.py
+        run: |
+          python -m pytest -q
+          node --test tests/api.test.mjs
       - name: Capture live UI
         env:
           API_KEYS_JSON: '{"local-demo":{"role":"editor","user_id":"demo","clients":["*"]}}'
@@ -31,6 +35,7 @@ jobs:
             curl -fs http://127.0.0.1:8000/health && break
             sleep 1
           done
+          TEST_BASE_URL=http://127.0.0.1:8000 COPILOT_SCREENSHOT=ui-capture/17-copilot.png python tests/check_copilot_ui.py
           python - <<'PY'
           from playwright.sync_api import sync_playwright
           with sync_playwright() as p:
@@ -86,8 +91,70 @@ jobs:
                   page.screenshot(path="ui-capture/06-history.png")
                   page.get_by_role("button",name="Следующая версия").click()
                   page.locator(".timeline-label").filter(has_text="Текущая версия").wait_for()
+                  page.get_by_role("button", name="Источники", exact=True).click()
+                  page.locator(".mg-catalog-card").first.wait_for()
+                  assert page.locator(".mg-catalog-card").count() == 4
+                  page.screenshot(path="ui-capture/11-sources.png")
+                  for category in ("crm", "mail", "calendar", "docs"):
+                      page.locator('[data-action="mg-open:'+category+'"]').click()
+                      page.locator(".mg-detail-card").first.wait_for()
+                      page.wait_for_function("!document.querySelector('[data-action=mg-refresh]').disabled")
+                      page.screenshot(path="ui-capture/12-"+category+".png")
+                      assert page.locator(".mg-detail-card").count() == 2
+                      if category == "crm":
+                          switch = page.get_by_role("switch", name="Найти контакт")
+                          switch.click()
+                          assert switch.get_attribute("aria-checked") == "false"
+                          switch.click()
+                          assert switch.get_attribute("aria-checked") == "true"
+                          page.get_by_role("button", name="Контакты Имена", exact=False).click()
+                          page.locator("#mg-record-search").wait_for()
+                          page.get_by_role("button",name="Закрыть").click()
+                      page.get_by_role("button",name="К источникам").click()
+                  page.get_by_role("button",name="Настройки",exact=True).click()
+                  page.locator(".mg-settings-card").first.wait_for()
+                  switch = page.get_by_role("switch",name="Показывать только проверенные связи")
+                  switch.click()
+                  assert switch.get_attribute("aria-checked") == "true"
+                  switch.click()
+                  page.screenshot(path="ui-capture/16-settings.png")
                   if errors:
                       raise AssertionError(errors)
+              finally:
+                  context.close()
+                  browser.close()
+              browser = p.chromium.launch()
+              context = browser.new_context(viewport={"width":390,"height":844},is_mobile=True,has_touch=True,device_scale_factor=1)
+              page = context.new_page()
+              errors = []
+              page.on("pageerror", lambda error: errors.append(str(error)))
+              try:
+                  page.goto("http://127.0.0.1:8000/")
+                  page.locator("input[name=key]").fill("local-demo")
+                  page.get_by_role("button",name="Подключиться").click()
+                  page.locator(".client-card").first.wait_for()
+                  assert page.evaluate("document.documentElement.scrollWidth === innerWidth")
+                  page.screenshot(path="ui-capture/07-mobile-clients.png")
+                  page.locator('[data-client="krasnodar"]').tap()
+                  page.locator(".graph .person").first.wait_for()
+                  assert not page.locator("#contact-panel").is_visible()
+                  assert page.evaluate("document.documentElement.scrollWidth === innerWidth")
+                  page.screenshot(path="ui-capture/08-mobile-map.png")
+                  page.get_by_role("button",name="Список контактов").tap()
+                  page.locator(".mobile-person-choice").first.tap()
+                  assert page.locator("#contact-panel").is_visible()
+                  page.screenshot(path="ui-capture/09-mobile-contact.png")
+                  page.locator("#contact-panel .panel-heading button").tap()
+                  assert not page.locator("#contact-panel").is_visible()
+                  page.locator('[data-action="mobile-assistant"]').tap()
+                  page.locator("#chat-input").fill("Кто принимает решения?")
+                  page.locator("#chat-form button[type=submit]").tap()
+                  page.locator(".bubble.assistant").last.wait_for()
+                  page.screenshot(path="ui-capture/10-mobile-assistant.png")
+                  page.locator("#assistant-panel .panel-heading button").tap()
+                  page.get_by_role("button",name="Предыдущая версия").tap()
+                  page.locator(".timeline-label.historical").wait_for()
+                  assert not errors, errors
               finally:
                   context.close()
                   browser.close()
