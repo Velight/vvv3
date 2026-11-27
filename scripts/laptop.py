@@ -1,4 +1,4 @@
-"""Run the app, local Ollama and an optional Pinggy tunnel until Ctrl+C."""
+"""Run the app without a model; Ollama and Pinggy are opt-in."""
 import argparse
 import os
 import re
@@ -11,6 +11,7 @@ from dotenv import dotenv_values
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
 parser.add_argument('--public', action='store_true', help='Expose through the user-approved Pinggy service')
+parser.add_argument('--with-ollama', action='store_true', help='Enable optional local Ollama')
 parser.add_argument('--ollama', default=os.getenv('OLLAMA_BIN', 'ollama'))
 parser.add_argument('--models', default=os.getenv('OLLAMA_MODELS'))
 args = parser.parse_args()
@@ -28,11 +29,22 @@ def occupied(port):
 try:
     if occupied(8000):
         sys.exit('Сервер уже запущен: http://127.0.0.1:8000. Сначала остановите прежний запуск.')
-    if not occupied(11434):
+    if not args.with_ollama:
+        env['LLM_BASE_URL'] = ''
+        env['LLM_MODEL'] = ''
+    if args.with_ollama:
+        env['LLM_BASE_URL'] = env.get('LLM_BASE_URL') or 'http://127.0.0.1:11434/v1'
+        env['LLM_MODEL'] = env.get('LLM_MODEL') or 'llama3.2:3b'
+    if args.with_ollama and not occupied(11434):
         ollama_env = {**env, 'OLLAMA_HOST': '127.0.0.1:11434', 'OLLAMA_NO_CLOUD': '1', 'OLLAMA_CONTEXT_LENGTH': '8192', 'OLLAMA_NUM_PARALLEL': '1'}
         if args.models:
             ollama_env['OLLAMA_MODELS'] = args.models
-        children.append(subprocess.Popen([args.ollama, 'serve'], env=ollama_env, stdout=open(logs/'ollama.log', 'a'), stderr=subprocess.STDOUT))
+        try:
+            children.append(subprocess.Popen([args.ollama, 'serve'], env=ollama_env, stdout=open(logs/'ollama.log', 'a'), stderr=subprocess.STDOUT))
+        except OSError:
+            print('Ollama недоступна. Продолжаем с автоматической аналитикой.', flush=True)
+            env['LLM_BASE_URL'] = ''
+            env['LLM_MODEL'] = ''
     if args.public:
         tunnel = subprocess.Popen(['ssh', '-F', '/dev/null', '-p', '443', '-o', 'ConnectTimeout=15', '-o', 'ServerAliveInterval=30',
             '-o', 'StrictHostKeyChecking=accept-new', '-o', 'UserKnownHostsFile='+str(root/'data'/'pinggy-known-hosts'),

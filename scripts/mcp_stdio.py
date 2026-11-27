@@ -15,7 +15,7 @@ async def main():
     config = dotenv_values(Path(__file__).resolve().parents[1] / '.env')
     key = os.getenv('KROK_API_KEY')
     if not key:
-        keys = json.loads(config.get('API_KEYS_JSON', '{}'))
+        keys = json.loads(os.getenv('API_KEYS_JSON') or config.get('API_KEYS_JSON', '{}'))
         key = next((k for k, v in keys.items() if v.get('role') == 'viewer'), None)
     if not key:
         raise RuntimeError('Set KROK_API_KEY to a viewer key')

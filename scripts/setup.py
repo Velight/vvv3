@@ -22,6 +22,8 @@ if not (root/'.env').exists():
     editor, viewer = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
     keys = {editor: {'user_id':'owner','role':'editor','clients':['*']}, viewer: {'user_id':'agent','role':'viewer','clients':['*']}}
     content = "API_KEYS_JSON='" + json.dumps(keys) + "'\nDATABASE_PATH=" + str(root/'data/krok.db') + "\nSEED_DEMO=true\nLLM_BASE_URL=http://127.0.0.1:11434/v1\nLLM_MODEL=llama3.2:3b\nLLM_TIMEOUT=120\nPUBLIC_HOSTS=\n"
+    if not args.llama:
+        content = content.replace('LLM_BASE_URL=http://127.0.0.1:11434/v1', 'LLM_BASE_URL=').replace('LLM_MODEL=llama3.2:3b', 'LLM_MODEL=')
     with open(root/'.env', 'x') as f:
         os.chmod(root/'.env', 0o600)
         f.write(content)

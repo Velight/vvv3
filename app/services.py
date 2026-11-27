@@ -165,3 +165,57 @@ def context(state, scope="client", scope_id=None):
         ],
         "citations": a,
     }
+
+
+def compare_maps(before, after, scope="client", scope_id=None):
+    """Compare saved map records by ID, ignoring timestamp-only changes."""
+    def records(snapshot):
+        try:
+            people, relations, deals = scoped(snapshot, scope, scope_id)
+        except HTTPException as exc:
+            if exc.status_code != 404:
+                raise
+            return ([], [], [])
+        # Include rejected edges so a review is a status change, not a deletion.
+        ids = {p.id for p in snapshot.people}
+        relations = [r for r in snapshot.relations
+                     if (scope == "client" or
+                         scope == "deal" and r.deal_id == scope_id or
+                         scope == "person" and scope_id in (r.from_person_id, r.to_person_id))
+                     and r.from_person_id in ids and r.to_person_id in ids]
+        return people, relations, deals
+
+    lines = [f"Сравнение версий {before.version} → {after.version}."]
+    names = {p.id: p.name for p in [*before.people, *after.people]}
+    labels = {"name": "имя", "title": "должность", "department": "подразделение",
+              "relationship": "отношения", "status": "статус", "description": "описание",
+              "stage": "этап", "amount": "сумма", "participants": "участники",
+              "communication_notes": "заметки", "is_decision_maker": "ЛПР"}
+    values = {"strong": "устойчивые", "developing": "развивающиеся", "weak": "слабые",
+              "unknown": "неизвестно", "proposed": "не проверено", "confirmed": "подтверждено",
+              "rejected": "отклонено"}
+    def show(value):
+        if isinstance(value, str):
+            return values.get(value, value)[:180] or "не указано"
+        return str(value)[:180]
+    def title(item):
+        return getattr(item, "name", None) or (
+            names.get(item.from_person_id, item.from_person_id) + " → " +
+            names.get(item.to_person_id, item.to_person_id))
+    for label, old_items, new_items in zip(("Контакты", "Связи", "Сделки"), records(before), records(after)):
+        old, new = ({x.id: x for x in items} for items in (old_items, new_items))
+        added, removed = new.keys() - old.keys(), old.keys() - new.keys()
+        changed = []
+        for key in sorted(old.keys() & new.keys()):
+            a, b = old[key].model_dump(), new[key].model_dump()
+            fields = [f"{labels.get(k, k)}: {show(a.get(k))} → {show(v)}"
+                      for k, v in b.items() if k not in {"updated_at", "reviewed_by"} and a.get(k) != v]
+            if fields:
+                changed.append(title(new[key]) + ": " + "; ".join(fields))
+        lines.append(f"{label}: добавлено {len(added)}, удалено {len(removed)}, изменено {len(changed)}.")
+        details = (["+ " + title(new[k]) for k in sorted(added)] +
+                   ["− " + title(old[k]) for k in sorted(removed)] + changed)
+        lines.extend(details[:12])
+        if len(details) > 12:
+            lines.append(f"Ещё изменений: {len(details) - 12}.")
+    return "\n".join(lines)

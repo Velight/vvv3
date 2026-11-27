@@ -78,10 +78,92 @@ def relevant_facts(question, facts):
     return facts[:60]
 
 
+AUTOMATIC_LABEL = "Автоматическая аналитика · данные SQLite, без LLM."
+
+
+def analytic_intent(message):
+    q = message.lower().replace("ё", "е")
+    if re.search(r"сравн|что изменил|изменения (?:между|версий)", q):
+        return "compare"
+    if re.search(r"рекоменд|непровер|не провер|недоста|заполн|что проверить", q):
+        return "recommendations"
+    if re.search(r"сводк|обзор|резюме|кого позвать", q):
+        return "summary"
+    return "auto"
+
+
+def automatic_answer(message, ctx, intent="auto"):
+    """Deterministic, read-only analysis; document text never selects actions."""
+    guidance = help_answer(message, ctx)
+    if intent == "help":
+        return "\n\n".join(help_facts())
+    if guidance and intent == "auto":
+        return guidance
+    intent = analytic_intent(message) if intent == "auto" else intent
+    people, relations = ctx.get("people", []), ctx.get("relations", [])
+    names = {p["id"]: p["name"] for p in people}
+    if intent == "recommendations":
+        proposed = [r for r in relations if r["status"] == "proposed"]
+        lines = [f"Непроверенных связей: {len(proposed)}. Подтверждайте только после проверки источника."]
+        for r in proposed[:10]:
+            evidence = r.get("evidence", [])
+            sources = ", ".join(dict.fromkeys(e["source_id"] for e in evidence))
+            lines.append(f"Проверить: {names.get(r['from_person_id'], r['from_person_id'])} → "
+                         f"{names.get(r['to_person_id'], r['to_person_id'])}. "
+                         + (f"Источник: {sources}. Цитата: «{evidence[0]['quote'][:240]}»."
+                            if evidence else "Нет источника: запросите подтверждающий документ."))
+        if len(proposed) > 10:
+            lines.append(f"Ещё непроверенных связей: {len(proposed)-10}.")
+        gaps = []
+        for p in people:
+            missing = [label for key, label in (("title", "должность"), ("department", "подразделение")) if not p.get(key)]
+            if not p.get("email") and not p.get("phone"):
+                missing.append("канал связи (email или телефон)")
+            if p.get("relationship", "unknown") == "unknown":
+                missing.append("уровень отношений")
+            if missing:
+                gaps.append(p["name"] + ": уточнить " + ", ".join(missing) + ".")
+        lines.append(f"Контактов с недостающими данными: {len(gaps)}.")
+        lines.extend(gaps[:12])
+        if len(gaps) > 12:
+            lines.append(f"Ещё контактов для уточнения: {len(gaps)-12}.")
+        if not any(p.get("is_decision_maker") for p in people):
+            lines.append("ЛПР не отмечены: уточните, кто принимает решения; не назначайте роль по предположению.")
+        return "\n".join(lines)
+    if intent == "summary":
+        client = ctx.get("client", {})
+        lpr = [p["name"] for p in people if p.get("is_decision_maker")]
+        lines = [f"{client.get('name', 'Выбранный контекст')} · версия {client.get('version', '—')}.",
+                 f"Контактов: {len(people)}. ЛПР: {len(lpr)}. Сделок: {len(ctx.get('deals', []))}.",
+                 "ЛПР: " + (", ".join(lpr[:12]) or "не указаны") + ".",
+                 "Контакты: " + (", ".join(p["name"] for p in people[:20]) or "пока нет контактов") + ".",
+                 f"Связей: {len(relations)}; подтверждено: {sum(r['status'] == 'confirmed' for r in relations)}; "
+                 f"не проверено: {sum(r['status'] == 'proposed' for r in relations)}."]
+        if len(people) > 20:
+            lines.append(f"Ещё контактов: {len(people)-20}.")
+        for d in ctx.get("deals", [])[:8]:
+            lines.append(f"Сделка: {d['name']}; этап: {d['stage']}." +
+                         (f" Сумма: {d['amount']:g} {d.get('currency', '')}." if d.get('amount') is not None else " Сумма не указана."))
+        for event in ctx.get("interactions", [])[-3:]:
+            lines.append(f"{event['occurred_at']}: {event['summary'][:300]}")
+        if not ctx.get("interactions"):
+            lines.append("Взаимодействия не зафиксированы.")
+        return "\n".join(lines)
+    if re.search(r"сколько контактов|количество контактов", message.lower()):
+        return f"Количество контактов в выбранном контексте: {len(people)}."
+    # Exact names/fields are searchable without generating new claims.
+    facts = grounded_facts(ctx)
+    words = {w[:5] for w in re.findall(r"[а-яёa-z]{4,}", message.lower())}
+    matches = [fact for fact in relevant_facts(message, facts) if any(w in fact.lower() for w in words)]
+    return "\n\n".join(matches[:8]) if matches else (
+        "В данных приложения нет ответа на этот запрос. Используйте сводку, сравнение версий, "
+        "рекомендации или помощь по интерфейсу. Автоматическая аналитика не изменяет данные.")
+
+
 class AI:
     def __init__(self, base_url="", model="", api_key=""):
         self.base_url, self.model, self.api_key = base_url.rstrip("/"), model, api_key
-        self.mode = "llm" if base_url and model else "demo"
+        self.mode = "llm" if base_url and model else "analytics"
 
     def complete(self, system, payload, schema=None):
         a = {
@@ -99,7 +181,7 @@ class AI:
                 "json_schema": {"name": "extraction", "schema": schema},
             }
         c = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
-        with httpx.Client(timeout=float(os.getenv("LLM_TIMEOUT", "120")), trust_env=False) as b:
+        with httpx.Client(timeout=httpx.Timeout(min(float(os.getenv("LLM_TIMEOUT", "20")), 20), connect=2), trust_env=False) as b:
             url = urlsplit(self.base_url)
             if url.hostname in {"localhost", "127.0.0.1"} and url.port == 11434:
                 # Native Ollama API keeps weights warm and bounds the context explicitly.
@@ -119,7 +201,7 @@ class AI:
             return r.json()["choices"][0]["message"]["content"]
 
     def extract(self, state, source):
-        if self.mode == "demo":
+        if self.mode != "llm":
             # Demo extraction only recognizes an explicit literal sentence; no hidden guesses.
             d = []
             for a in state.people:
@@ -176,20 +258,7 @@ class AI:
                 raise ValueError("Invalid fact references")
             ids = list(dict.fromkeys(ids))
             return "\n\n".join(facts[i] for i in ids) if ids else "В данных приложения нет ответа на этот запрос; ассистент работает только с имеющимися сведениями и не изменяет их."
-        c = ", ".join(p["name"] for p in ctx["people"]) or "пока нет контактов"
-        b = [
-            "Демонстрационный режим: это обзор выбранного контекста, а не ответ нейросети.",
-            f"Контакты: {c}.",
-        ]
-        for r in ctx["relations"]:
-            a = "Подтверждено" if r["status"] == "confirmed" else "Предположение"
-            b.append(
-                f"{a}: {r['description'] or r['kind']}. Основания: "
-                + ", ".join(e["source_id"] for e in r["evidence"])
-            )
-        if not ctx["relations"]:
-            b.append("Сведений о связях пока нет.")
-        return "\n".join(b)
+        return automatic_answer(message, ctx)
 
 
 def process_job(store, ai, job):
