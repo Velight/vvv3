@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import secrets
+from tempfile import TemporaryDirectory
 from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import Annotated, Literal
@@ -66,6 +67,11 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
     )
 
     mcp_server, mcp_app = create_mcp(f, keys)
+    # Public demo is physically isolated from the CRM and never reads uploaded sources.
+    demo_dir = TemporaryDirectory(prefix="krok-public-mcp-")
+    demo_store = Store(Path(demo_dir.name) / "synthetic.db")
+    seed(demo_store)
+    demo_server, demo_app = create_mcp(demo_store, {}, public_demo=True)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -82,7 +88,7 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
         h = asyncio.Event()
         i = asyncio.create_task(worker(f, ai, h)) if run_worker else None
         try:
-            async with mcp_server.session_manager.run():
+            async with mcp_server.session_manager.run(), demo_server.session_manager.run():
                 yield
         finally:
             h.set()
@@ -96,6 +102,7 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
         description="MVP: persistent client maps, reviewable evidence, history and scoped assistant. All seed data is synthetic.",
     )
     a.state.store, a.state.ai = f, ai
+    a.state.public_demo_directory = demo_dir
     e = [
         x.strip()
         for x in os.getenv(
@@ -523,6 +530,7 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
             "messages": i,
         }
 
+    a.mount("/mcp-demo", demo_app)
     a.mount("/mcp", mcp_app)
 
     # Register after API routes so unknown /api URLs never receive index.html.

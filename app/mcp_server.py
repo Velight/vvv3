@@ -10,10 +10,17 @@ from app.services import card, graph, context, find
 from app.site_knowledge import ARTICLES
 
 
-def create_mcp(store, keys):
+def create_mcp(store, keys, *, public_demo=False):
     hosts = ['127.0.0.1', '127.0.0.1:*', 'localhost', 'localhost:*'] + [h for h in os.getenv('PUBLIC_HOSTS', '').split(',') if h]
     origins = ['http://127.0.0.1:*', 'http://localhost:*'] + ['https://' + h for h in os.getenv('PUBLIC_HOSTS', '').split(',') if h]
-    server = FastMCP('КРОК · Контакты', stateless_http=True, json_response=True,
+    if public_demo:
+        hosts += ['vvv3.onrender.com']
+        if os.getenv('RENDER_EXTERNAL_HOSTNAME'):
+            hosts.append(os.environ['RENDER_EXTERNAL_HOSTNAME'])
+        origins += ['https://chatgpt.com', 'https://chat.openai.com', 'https://vvv3.onrender.com']
+    server = FastMCP('КРОК · Демонстрационные контакты' if public_demo else 'КРОК · Контакты',
+        instructions='All data in this public demo are synthetic and do not describe real employees or business relationships.' if public_demo else None,
+        stateless_http=True, json_response=True,
         streamable_http_path='/', transport_security=TransportSecuritySettings(
             allowed_hosts=hosts, allowed_origins=origins))
     annotations = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
@@ -29,7 +36,7 @@ def create_mcp(store, keys):
 
     @server.tool(annotations=annotations)
     def list_clients(ctx: Context, query: str = '', offset: int = 0, limit: int = 50) -> dict:
-        """List only clients accessible to this access key; supports search and pagination."""
+        """List clients in the permitted dataset; supports search and pagination."""
         u = user(ctx)
         if offset < 0 or not 1 <= limit <= 200:
             raise ValueError('Invalid pagination')
@@ -87,6 +94,8 @@ def create_mcp(store, keys):
     async def authenticated(scope, receive, send):
         if scope['type'] != 'http':
             return await mcp_app(scope, receive, send)
+        if public_demo:
+            return await mcp_app({**scope, 'krok_user': {'user_id': 'public-demo', 'role': 'viewer', 'clients': ['*']}}, receive, send)
         headers = dict(scope['headers'])
         raw = headers.get(b'authorization', b'').decode()
         key = raw[7:] if raw.startswith('Bearer ') else headers.get(b'x-api-key', b'').decode()
