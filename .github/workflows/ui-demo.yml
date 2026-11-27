@@ -22,7 +22,7 @@ jobs:
       - name: API and frontend tests
         run: |
           python -m pytest -q
-          node --test tests/api.test.mjs
+          node --test tests/api.test.mjs tests/webmcp.test.mjs
       - name: Capture live UI
         env:
           API_KEYS_JSON: '{"local-demo":{"role":"editor","user_id":"demo","clients":["*"]}}'

@@ -171,7 +171,7 @@ function compareVersions(){
 let agentController;
 function agentMcpPath(){return state.me?.public_demo?'/mcp-demo/':'/mcp/'}
 function connectAgent(){
- modal('Подключить своего агента','<div class="dialog-form"><label>Клиент<select id="agent-client"><option value="codex">GPT через Codex MCP</option><option value="claude">Claude Desktop</option><option value="custom">Custom MCP</option></select></label><label>Адрес MCP<input readonly value="'+esc(location.origin+agentMcpPath())+'"></label><p id="agent-status" role="status">Доступность ещё не проверена.</p><button type="button" class="pill" data-action="check-agent">Проверить сервер</button><div id="agent-instructions"></div><p class="small muted">Проверка выполняется из этого браузера. Она не подтверждает подключение внешнего агента. Его ответы остаются в Codex, Claude или другом MCP-клиенте.</p></div>');
+ modal('Подключить своего агента','<div class="dialog-form"><label>Клиент<select id="agent-client"><option value="webmcp">ChatGPT Desktop · инструменты сайта</option><option value="codex">GPT через Codex MCP</option><option value="claude">Claude Desktop</option><option value="custom">Custom MCP</option></select></label><label>Адрес MCP<input readonly value="'+esc(location.origin+agentMcpPath())+'"></label><p id="agent-status" role="status">Доступность ещё не проверена.</p><button type="button" class="pill" data-action="check-agent">Проверить сервер</button><div id="agent-instructions"></div><p class="small muted">Проверка выполняется из этого браузера. Она не подтверждает подключение внешнего агента. Его ответы остаются в Codex, Claude или другом MCP-клиенте.</p></div>');
  agentInstructions();checkAgent();
 }
 function agentInstructions(){
@@ -180,7 +180,11 @@ function agentInstructions(){
  const code=text=>'<pre class="agent-config"><code>'+esc(text)+'</code></pre>';
  const local=location.hostname==='localhost'||location.hostname==='127.0.0.1';
  let html='';
- if(state.me?.public_demo){
+ if(kind==='webmcp'){
+  const supported=typeof (document.modelContext||navigator.modelContext)?.registerTool==='function';
+  html='<p>Откройте этот сайт во встроенном браузере приложения ChatGPT для компьютера. В адресной строке выберите «Инструменты сайта» (Site tools), если они доступны. Затем задайте вопрос в чате.</p><p>'+ (supported?'Браузер поддерживает интерфейс WebMCP; проверьте список инструментов в ChatGPT.':'В этом браузере интерфейс WebMCP не обнаружен.')+'</p><p>Доступны только демонстрационные данные. Отдельный API-ключ не нужен. Ответы появляются в ChatGPT, не в чате сайта.</p><p><a href="https://help.openai.com/en/articles/20001423-using-site-tools-in-the-chatgpt-desktop-app" target="_blank" rel="noopener noreferrer">Инструкция ChatGPT</a></p>';
+ }
+ else if(state.me?.public_demo){
   if(kind==='codex')html='<p>Подключите открытый MCP в терминале:</p>'+code('codex mcp add krok --url '+url)+'<p>В новом чате Codex попросите вызвать list_clients.</p>';
   else if(kind==='claude')html='<p>В Claude откройте Customize → Connectors → Add custom connector. Вставьте адрес выше и выберите подключение без авторизации.</p>';
   else html='<p>В ChatGPT (при доступности пользовательских MCP) или другом MCP-клиенте добавьте указанный URL. Transport: Streamable HTTP. Authentication: No Authentication. Доступны только демонстрационные данные и 8 инструментов чтения.</p>';
