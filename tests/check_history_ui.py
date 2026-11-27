@@ -59,20 +59,9 @@ with sync_playwright() as p:
         "document.querySelector('.timeline-label').textContent.startsWith('Текущая версия')"
     )
     page.wait_for_function("!historyPending && state.graph.version === 9")
-    page.get_by_role("button", name="Воспроизвести историю").click()
-    page.wait_for_function(
-        "document.querySelector('.timeline-label').textContent.startsWith('Версия 1')"
-    )
-    page.wait_for_function(
-        "document.querySelector('.timeline-label').textContent.startsWith('Версия 3')",
-        timeout=8000,
-    )
-    page.wait_for_function("!historyPending && state.graph.version === 3")
-    page.get_by_role("button", name="Приостановить историю").click()
-    page.wait_for_timeout(500)
-    value = page.locator("#timeline").input_value()
-    page.wait_for_timeout(1400)
-    assert page.locator("#timeline").input_value() == value
+    assert page.locator('[data-action="play-history"]').count() == 0
+    page.get_by_role("button", name="Предыдущая версия").click()
+    page.wait_for_function("!historyPending && state.graph.version === 8")
     page.emulate_media(reduced_motion="reduce")
     page.get_by_role("button", name="Следующая версия").click()
     page.wait_for_timeout(500)
@@ -83,8 +72,32 @@ with sync_playwright() as p:
         == "0s"
     )
     page.set_viewport_size({"width": 390, "height": 844})
+    # Empty S7 map: caption is outside and below the graph viewport.
+    # Dialog close glyph is geometrically centered on desktop and mobile.
+    for width, height in [(390, 844), (1536, 900)]:
+        page.set_viewport_size({"width": width, "height": height})
+        page.locator('#dock [data-action="map"]').click()
+        page.locator('[data-client="s7"]').click()
+        page.locator(".empty-map").wait_for()
+        assert page.locator('[data-action="play-history"]').count() == 0
+        assert page.locator("#timeline").is_disabled()
+        graph = page.locator("#graph-content").bounding_box()
+        caption = page.locator(".empty-map").bounding_box()
+        assert caption["y"] >= graph["y"] + graph["height"] - 1
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        page.locator('#dock [data-action="settings"]').click()
+        page.locator('[data-action="mg-key"]').click()
+        page.locator("#dialog[open]").wait_for()
+        page.wait_for_function("document.querySelector('#dialog').getAnimations().every(a => a.playState === 'finished')")
+        close = page.locator(".dialog-head [data-close]")
+        button = close.bounding_box()
+        icon = close.locator("svg").bounding_box()
+        for axis, size in [("x", "width"), ("y", "height")]:
+            assert abs(button[axis] + button[size]/2 - icon[axis] - icon[size]/2) < 1
+        close.click()
+        page.locator("#dialog").wait_for(state="hidden")
     assert not errors, errors
     b.close()
     print(
-        "PASS: live input, latest selection, node identity, read-only history, playback/pause, reduced motion, mobile"
+        "PASS: live input, latest selection, node identity, read-only history, manual navigation, reduced motion, empty state and centered close icon"
     )
