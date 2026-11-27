@@ -24,7 +24,16 @@ function mgStart(section,id=''){
 }
 function mgActive(section,id=''){return app.querySelector('.management-screen')?.dataset.section===section&&mgSection===section&&mgId===id}
 function mgHeader(title,description,extra=''){return '<header class="mg-header"><div><h1>'+esc(title)+'</h1><p>'+esc(description)+'</p></div>'+extra+'</header>'}
-function mgShell(section,html){app.innerHTML='<section class="management-screen" data-section="'+section+'">'+html+'</section>';renderDock(section)}
+function mgShell(section,html){
+ const markup='<section class="management-screen" data-section="'+section+'" data-view="'+esc(mgId)+'">'+html+'</section>';
+ const live=app.querySelector('.management-screen');
+ if(live?.dataset.section===section&&live.dataset.view===mgId){
+  // Keep the actual switch and focus target alive across updates.
+  const template=document.createElement('template');template.innerHTML=markup;
+  syncNode(live,template.content.firstElementChild);
+ }else app.innerHTML=markup;
+ renderDock(section);
+}
 function mgStatus(id){return id==='crm'?['Доступен','ok']:['Внешний сервис не подключён','offline']}
 function mgDot(label,cls){return '<span class="mg-status '+cls+'"><span></span>'+esc(label)+'</span>'}
 function mgToolEnabled(id,index){return mgTools[id+':'+index]!==false}

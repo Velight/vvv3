@@ -90,18 +90,30 @@ function updateMapShell(html){
  const live=app.querySelector('.map-screen');
  if(!live){app.innerHTML=html;return}
  const oldEdges=new Map([...live.querySelectorAll('[data-edge]')].map(el=>[el.dataset.edge,['x1','y1','x2','y2'].map(k=>Number(el.getAttribute(k)))]));
+ const oldPeople=new Set([...live.querySelectorAll('.graph [data-person]')].map(el=>el.dataset.person));
  const t=document.createElement('template');t.innerHTML=html;
  syncNode(live,t.content.firstElementChild,true);
  animateEdges(live,oldEdges);
+ if(!reducedMotion.matches){
+  for(const node of live.querySelectorAll('.graph [data-person]')){
+   if(!oldPeople.has(node.dataset.person))node.animate([{opacity:.55},{opacity:1}],{duration:180,easing:motionEase});
+  }
+ }
 }
+const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
+const motionEase='cubic-bezier(.333,1,.667,1)';
+const graphMotionMs=300;
 let edgeFrame;
 function animateEdges(root,previous){
  cancelAnimationFrame(edgeFrame);
- if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+ if(reducedMotion.matches)return;
  const attrs=['x1','y1','x2','y2'];
- const moves=[...root.querySelectorAll('[data-edge]')].filter(el=>previous.has(el.dataset.edge)).map(el=>({el,from:previous.get(el.dataset.edge),to:attrs.map(k=>Number(el.getAttribute(k)))}));
+ const moves=[...root.querySelectorAll('[data-edge]')].filter(el=>previous.has(el.dataset.edge)).map(el=>({el,from:previous.get(el.dataset.edge),to:attrs.map(k=>Number(el.getAttribute(k)))})).filter(m=>m.from.some((v,i)=>v!==m.to[i]));
+ if(!moves.length)return;
  const start=performance.now();
- function frame(now){const t=Math.min(1,(now-start)/450),ease=1-Math.pow(1-t,3);
+ function frame(now){
+  if(!root.isConnected)return;
+  const t=reducedMotion.matches?1:Math.min(1,(now-start)/graphMotionMs),ease=1-Math.pow(1-t,3);
   for(const m of moves)attrs.forEach((k,i)=>m.el.setAttribute(k,m.from[i]+(m.to[i]-m.from[i])*ease));
   if(t<1)edgeFrame=requestAnimationFrame(frame);
  }
@@ -260,8 +272,15 @@ async function checkAgent(){
 }
 
 function updateGraphSelection(){document.querySelectorAll('.graph .person').forEach(el=>{const selected=el.dataset.person===state.selected&&!state.edge;el.classList.toggle('selected',selected);el.setAttribute('aria-pressed',String(selected))});document.querySelectorAll('.graph .edge').forEach(el=>el.classList.toggle('selected',el.dataset.edge===state.edge))}
-function selectPerson(id){state.selected=id;state.edge=null;state.detail=null;updateGraphSelection();renderContact();if(mobileQuery.matches&&mobilePanel!=='contact')mobileSheet('contact');loadDetail()}
-function selectEdge(id){state.edge=id;state.detail=null;updateGraphSelection();renderContact();if(mobileQuery.matches&&mobilePanel!=='contact')mobileSheet('contact')}
+function softenContactChange(){
+ if(reducedMotion.matches||mobileQuery.matches&&mobilePanel!=='contact'||state.collapsed.contact)return;
+ const body=$('#contact-panel .contact-body');
+ if(!body)return;
+ body.getAnimations().forEach(animation=>animation.cancel());
+ body.animate([{opacity:.75},{opacity:1}],{duration:150,easing:motionEase});
+}
+function selectPerson(id){const changed=state.selected!==id||Boolean(state.edge);state.selected=id;state.edge=null;state.detail=null;updateGraphSelection();renderContact();if(changed)softenContactChange();if(mobileQuery.matches&&mobilePanel!=='contact')mobileSheet('contact');loadDetail()}
+function selectEdge(id){const changed=state.edge!==id;state.edge=id;state.detail=null;updateGraphSelection();renderContact();if(changed)softenContactChange();if(mobileQuery.matches&&mobilePanel!=='contact')mobileSheet('contact')}
 async function setScope(scope,id){if(state.scope===scope&&(state.scopeId||null)===(id||null))return;state.scope=scope;state.scopeId=id||null;state.edge=null;if(scope==='person'&&id)state.selected=id;await loadMap();loadChat()}
 function stopHistory(){clearTimeout(historyTimer);historyPending=false}
 function historyCaption(version=state.graph.version){
