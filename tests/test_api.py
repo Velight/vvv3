@@ -181,17 +181,15 @@ def test_source_processing_flow(client):
     d = client.app.state.store
     process_job(d, client.app.state.ai, d.claim_job())
     assert client.get("/api/v1/jobs/" + j["id"]).json()["status"] == "completed"
-    b = client.get(BASE + "/relations").json()["items"]
-    a = next(r for r in b if r["id"].startswith(j["id"]))
-    assert a["status"] == "proposed" and a["evidence"][0]["quote"] in c["text"]
-    e = client.get(BASE).json()["version"]
-    assert (
-        client.patch(
-            BASE + f"/relations/{a['id']}/review",
-            json={"expected_version": e, "status": "confirmed"},
-        ).status_code
-        == 200
-    )
+    assert not any(r["id"].startswith(j["id"]) for r in client.get(BASE + "/relations").json()["items"])
+    pr = next(p for p in client.get(BASE + "/proposals").json()["items"] if p["id"] == "job-" + j["id"])
+    assert pr["status"] == "open" and pr["changes"][0]["source"]["quote"] in c["text"]
+    before = client.get(BASE).json()["version"]
+    merged = client.post(BASE + "/proposals/" + pr["id"] + "/decision", json={"decision":"merge"})
+    assert merged.status_code == 200 and merged.json()["merged_version"] == before + 1
+    relation = next(r for r in client.get(BASE + "/relations").json()["items"] if r["id"].startswith(j["id"]))
+    assert relation["status"] == "confirmed"
+
 
 
 def test_persistence(tmp_path):

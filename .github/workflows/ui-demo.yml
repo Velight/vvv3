@@ -38,6 +38,7 @@ jobs:
           TEST_BASE_URL=http://127.0.0.1:8000 python tests/check_motion_ui.py
           TEST_BASE_URL=http://127.0.0.1:8000 python tests/check_mobile_navigation_ui.py
           TEST_BASE_URL=http://127.0.0.1:8000 python tests/check_contact_provenance_ui.py
+          TEST_BASE_URL=http://127.0.0.1:8000 python tests/check_proposals_ui.py
           TEST_BASE_URL=http://127.0.0.1:8000 python tests/check_history_ui.py
           TEST_BASE_URL=http://127.0.0.1:8000 COPILOT_SCREENSHOT=ui-capture/17-copilot.png python tests/check_copilot_ui.py
           python - <<'PY'

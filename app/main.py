@@ -36,6 +36,7 @@ from app.services import find, card, graph, context, check_evidence, check_relat
 from app.ai import AI, worker, automatic_answer, analytic_intent, AUTOMATIC_LABEL
 from app.mcp_server import create_mcp
 from app.site_knowledge import help_answer
+from app import proposals
 
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
@@ -83,6 +84,7 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
                 from app.demo_history import seed_history
 
                 seed_history(f)
+            proposals.seed_demo_proposals(f)
         # One worker process only. Recover unfinished extraction after a restart.
         if run_worker:
             with f.connection() as d:
@@ -207,6 +209,21 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
         if not user.get("public_demo"):
             f.mark_read(client_id, user["user_id"], version)
         return {"read_version": version}
+
+    @a.get("/api/v1/clients/{client_id}/proposals", tags=["Proposals"])
+    def proposal_list(client_id: str, user: User):
+        access(client_id, user)
+        return {"items": proposals.list_proposals(f, client_id, bool(user.get("public_demo")))}
+
+    @a.post("/api/v1/clients/{client_id}/proposals", status_code=201, tags=["Proposals"])
+    def propose_contact(client_id: str, body: proposals.ContactProposal, user: User):
+        access(client_id, user, True)
+        return proposals.create_contact(f, client_id, user["user_id"], body)
+
+    @a.post("/api/v1/clients/{client_id}/proposals/{proposal_id}/decision", tags=["Proposals"])
+    def decide_proposal(client_id: str, proposal_id: str, body: proposals.Decision, user: User):
+        access(client_id, user, True)
+        return proposals.decide(f, client_id, proposal_id, user["user_id"], body.decision)
 
     @a.get("/api/v1/clients/{client_id}/map", tags=["Map"])
     def client_map(

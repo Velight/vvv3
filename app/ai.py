@@ -10,6 +10,7 @@ import httpx
 from app.models import Extraction, Relation, now
 from app.services import find, check_relation
 from app.site_knowledge import help_answer, help_facts
+from app.proposals import create_extraction
 
 log = logging.getLogger(__name__)
 
@@ -267,21 +268,7 @@ def process_job(store, ai, job):
         b = find(c.sources, job["source_id"])
         a = ai.extract(c, b)
 
-        def apply(current):
-            d = []
-            for i, f in enumerate(a.relations):
-                f.status = "proposed"
-                if not f.evidence or any(e.source_id != b.id for e in f.evidence):
-                    raise ValueError("Extraction requires evidence from this source")
-                check_relation(current, f)
-                # Deterministic ID makes recovery after a crash idempotent.
-                g = Relation(**f.model_dump(), id=f"{job['id']}:{i}")
-                if not any(r.id == g.id for r in current.relations):
-                    current.relations.append(g)
-                    d.append(g)
-            return d
-
-        store.mutate(c.id, None, "worker", "source.processed", apply)
+        create_extraction(store, c.id, b.id, job["id"], a.relations)
         store.finish_job(job["id"], "completed")
     except Exception:
         log.exception("Extraction failed for job %s", job["id"])
