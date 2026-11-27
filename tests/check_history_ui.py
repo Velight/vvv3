@@ -21,12 +21,32 @@ with sync_playwright() as p:
     page.evaluate(
         "window.originalSlider=document.querySelector('#timeline');window.originalGraph=document.querySelector('.graph')"
     )
+    # Caption and accessible value follow the slider synchronously, even
+    # before the debounced request for the selected snapshot has returned.
+    previews = page.locator("#timeline").evaluate("""el => {
+        return [6, 3].map(index => {
+            el.value = index;
+            el.dispatchEvent(new Event('input', {bubbles: true}));
+            const label = document.querySelector('.timeline-label').textContent;
+            return {label, aria: el.getAttribute('aria-valuetext')};
+        });
+    }""")
+    for result, version, day in zip(previews, [7, 4], [25, 22]):
+        expected = page.evaluate(
+            """day => new Date('2026-11-' + day + 'T10:00:00+03:00')
+                .toLocaleString('ru-RU', {dateStyle:'medium',timeStyle:'short'})""",
+            day,
+        )
+        assert result["label"].startswith(f"Версия {version} ·")
+        assert expected in result["label"]
+        assert result["aria"] == result["label"]
     page.locator("#timeline").evaluate(
         "el=>{el.value=0;el.dispatchEvent(new Event('input',{bubbles:true}))}"
     )
     page.wait_for_function(
         "document.querySelector('.timeline-label').textContent.startsWith('Версия 1')"
     )
+    page.wait_for_function("!historyPending && state.graph.version === 1")
     assert page.locator(".graph .person").count() == 6
     assert page.get_by_role("button", name="Предложить правку").is_disabled()
     assert page.evaluate(
@@ -38,6 +58,7 @@ with sync_playwright() as p:
     page.wait_for_function(
         "document.querySelector('.timeline-label').textContent.startsWith('Текущая версия')"
     )
+    page.wait_for_function("!historyPending && state.graph.version === 9")
     page.get_by_role("button", name="Воспроизвести историю").click()
     page.wait_for_function(
         "document.querySelector('.timeline-label').textContent.startsWith('Версия 1')"
@@ -46,6 +67,7 @@ with sync_playwright() as p:
         "document.querySelector('.timeline-label').textContent.startsWith('Версия 3')",
         timeout=8000,
     )
+    page.wait_for_function("!historyPending && state.graph.version === 3")
     page.get_by_role("button", name="Приостановить историю").click()
     page.wait_for_timeout(500)
     value = page.locator("#timeline").input_value()

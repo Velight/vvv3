@@ -213,18 +213,29 @@ function selectPerson(id){state.selected=id;state.edge=null;state.detail=null;up
 function selectEdge(id){state.edge=id;state.detail=null;updateGraphSelection();renderContact();if(mobileQuery.matches&&mobilePanel!=='contact')mobileSheet('contact')}
 async function setScope(scope,id){if(state.scope===scope&&(state.scopeId||null)===(id||null))return;state.scope=scope;state.scopeId=id||null;state.edge=null;if(scope==='person'&&id)state.selected=id;await loadMap();loadChat()}
 function stopHistory(){clearTimeout(historyTimer);clearTimeout(playTimer);playing=false;historyPending=false}
-function historyCaption(){
- const h=state.history.find(h=>Number(h.version)===state.graph.version);
+function historyCaption(version=state.graph.version){
+ const h=state.history.find(h=>Number(h.version)===version);
+ const latest=version===versions().at(-1);
  const actions={'client.created':'Создана карта','person.created':'Добавлен контакт','person.updated':'Изменён контакт','relation.created':'Добавлена связь','relation.reviewed':'Проверена связь','source.created':'Добавлен источник','deal.created':'Добавлена сделка','deal.updated':'Изменена сделка','interaction.created':'Добавлено взаимодействие'};
  const stages=['ИТ: новый контакт и встреча','Закупки: укрепление отношений','Аналитика: новый контакт','Добавлена сделка по аналитике','Финансы: согласование плана','ИБ: укрепление отношений','ИТ: развитие отношений','Маркетинг: согласование плана'];
  const label=h?.action?.startsWith('demo.stage.')?'Демо · '+(stages[Number(h.action.split('.').pop())-1]||h.action):actions[h?.action]||h?.action||'Снимок карты';
- return (state.version===null?'Текущая версия':'Версия '+state.graph.version+' · только просмотр')+' · '+label+(h?' · '+date(h.created_at):'');
+ return (latest?'Текущая версия':'Версия '+version+' · только просмотр')+' · '+label+(h?' · '+date(h.event_at||h.created_at):'');
+}
+function previewHistory(index){
+ const vs=versions(),version=vs[index],slider=$('#timeline'),label=$('.timeline-label');
+ if(version==null||!slider||!label)return;
+ const caption=historyCaption(version);
+ slider.value=String(vs.length===1?1:index);
+ slider.setAttribute('aria-valuetext',caption);
+ slider.style.setProperty('--progress',(vs.length>1?index/(vs.length-1)*100:50)+'%');
+ label.textContent=caption;
+ label.classList.toggle('historical',index!==vs.length-1);
 }
 async function setVersion(index){
  const vs=versions();if(index<0||index>=vs.length||!state.client)return;
  clearTimeout(historyTimer);
  const token=++state.graphEpoch,epoch=state.epoch,version=vs[index];
- historyPending=true;renderContact();
+ historyPending=true;previewHistory(index);renderContact();renderAssistant();
  const q=params();q.set('version',version);
  try{
   const g=await api(path('/map?')+q);
@@ -265,7 +276,7 @@ async function action(a){if(a?.startsWith('mg-'))return mgAction(a);switch(a){ca
 document.addEventListener('click',ev=>{const el=ev.target.closest('[data-action],[data-close],[data-client],[data-person],[data-edge],[data-scope],[data-source],[data-process],[data-mobile-person]');if(!el||el.disabled)return;const d=el.dataset;try{let r;if('close'in d){dialog.close();return}if(d.mobilePerson){dialog.close();r=selectPerson(d.mobilePerson)}else if(d.client)r=openClient(d.client);else if(d.person)r=selectPerson(d.person);else if(d.edge)r=selectEdge(d.edge);else if(d.scope){const id=d.scope==='deal'?state.deals[0]?.id:d.scope==='person'?(state.selected||state.fullPeople[0]?.id):null;r=setScope(d.scope,id)}else if(d.source)r=showSource(d.source);else if(d.process)r=processSource(d.process);else r=action(d.action);Promise.resolve(r).catch(fail)}catch(e){fail(e)}});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&mobilePanel&&!dialog.open){mobilePanel='';applyMobile();return}if((e.key==='Enter'||e.key===' ')&&e.target.matches('svg [role="button"]')){e.preventDefault();const d=e.target.dataset;if(d.person)selectPerson(d.person);if(d.edge)selectEdge(d.edge)}});
 document.addEventListener('change',e=>{if(e.target.id==='agent-client')agentInstructions();if(e.target.id==='scope-select')setScope(state.scope,e.target.value).catch(fail);if(e.target.id==='timeline'){stopHistory();setVersion(Number(e.target.value)).catch(fail)}});
-document.addEventListener('input',e=>{if(e.target.id==='timeline'){stopHistory();state.graphEpoch++;const t=e.target,index=Number(t.value);historyPending=true;renderContact();historyTimer=setTimeout(()=>setVersion(index).catch(fail),70);t.style.setProperty('--progress',(Number(t.max)?Number(t.value)/Number(t.max)*100:100)+'%')}if(e.target.id==='chat-input')chatState().draft=e.target.value});
+document.addEventListener('input',e=>{if(e.target.id==='timeline'){stopHistory();state.graphEpoch++;const t=e.target,index=Number(t.value);historyPending=true;previewHistory(index);renderContact();renderAssistant();historyTimer=setTimeout(()=>setVersion(index).catch(fail),70)}if(e.target.id==='chat-input')chatState().draft=e.target.value});
 document.addEventListener('submit',e=>{if(e.target.id==='chat-form'){e.preventDefault();sendChat($('#chat-input').value)}});
 dialog.addEventListener('close',()=>{agentController?.abort();renderDock(app.querySelector('.management-screen')?.dataset.section||'map')});
 (async()=>{renderDock();if(!state.key){settings(true);return}try{state.me=await api('/me');await showClients()}catch(e){settings(true);if(e.status!==401)toast(e.message)}})();

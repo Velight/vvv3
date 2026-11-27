@@ -116,13 +116,41 @@ class Store:
 
     def history(self, client_id):
         with self.connection() as a:
-            return [
-                dict(r)
-                for r in a.execute(
-                    "SELECT version,created_at,actor,action FROM revisions WHERE client_id=? ORDER BY version",
-                    (client_id,),
-                )
-            ]
+            rows = a.execute(
+                """SELECT version,created_at,actor,action,
+                          CASE WHEN actor='seed' AND
+                            (action='client.created' OR action LIKE 'demo.stage.%')
+                            THEN data END AS demo_data
+                   FROM revisions WHERE client_id=? ORDER BY version""",
+                (client_id,),
+            ).fetchall()
+        history = []
+        for row in rows:
+            item = dict(row)
+            raw = item.pop("demo_data")
+            # A demo is generated in seconds, but its sources describe events
+            # on different days. Expose that scenario date separately from
+            # the immutable revision's actual creation timestamp.
+            if raw:
+                snapshot = json.loads(raw)
+                if snapshot.get("crm_id") == f"demo-{client_id}":
+                    action = item["action"]
+                    source_id = None
+                    if action == "client.created":
+                        source_id = f"{client_id}-source"
+                    elif action.startswith("demo.stage."):
+                        stage = action.rsplit(".", 1)[-1]
+                        if stage.isdigit() and int(stage) > 0:
+                            source_id = f"{client_id}-story-{int(stage)-1}"
+                    source = next(
+                        (s for s in snapshot.get("sources", [])
+                         if s.get("id") == source_id),
+                        None,
+                    )
+                    if source and source.get("source_date"):
+                        item["event_at"] = source["source_date"]
+            history.append(item)
+        return history
 
     def unread(self, client_id, actor, version):
         with self.connection() as a:

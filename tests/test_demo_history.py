@@ -39,3 +39,26 @@ def test_demo_does_not_modify_user_changes(tmp_path):
     seed_history(store)
     assert store.get("krasnodar").version == 2
     assert store.get("krasnodar").people[0].name == "User"
+
+
+def test_history_exposes_demo_event_dates_without_rewriting_revision_dates(tmp_path):
+    store = Store(tmp_path / "demo.db")
+    seed(store)
+    initial = store.history("krasnodar")[0]
+    seed_history(store)
+    history = store.history("krasnodar")
+    assert history[0] == initial
+    assert history[0]["event_at"][:10] == "2026-11-20"
+    assert [row["event_at"][:10] for row in history[1:]] == [
+        f"2026-11-{day}" for day in range(20, 28)
+    ]
+    for row in history:
+        snapshot = store.get("krasnodar", row["version"])
+        assert row["created_at"] == snapshot.updated_at
+    store.mutate("krasnodar", 9, "editor", "person.updated",
+                 lambda s: setattr(s.people[0], "name", "User"))
+    last = store.history("krasnodar")[-1]
+    assert last["version"] == 10
+    assert "event_at" not in last
+    assert last["created_at"] == store.get("krasnodar").updated_at
+    assert "event_at" not in store.history("s7")[0]
