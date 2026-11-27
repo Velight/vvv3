@@ -84,9 +84,13 @@ function mgSettings(){
 }
 function mgRenderSettings(){
  const panels=mgSettingGroups.map(([title,items])=>'<section class="mg-card mg-settings-card"><h2>'+esc(title)+'</h2>'+items.map(([key,name,desc])=>'<div class="mg-row"><div class="mg-row-text"><strong>'+esc(name)+'</strong><small>'+esc(desc)+'</small></div>'+mgSwitch(Boolean(mgPrefs[key]),'mg-pref:'+key,name,key==='confirm')+'</div>').join('')+'</section>').join('');
- mgShell('settings',mgHeader('Настройки','Ассистент, карта связей и уведомления')+'<div class="mg-grid">'+panels+'</div><div class="mg-footer"><button class="mg-pill" data-action="mg-key">Ключ доступа к CRM</button><span>Настройки сохраняются в этом браузере.</span></div>');
+ mgShell('settings',mgHeader('Настройки','Ассистент, карта связей и уведомления')+'<div class="mg-grid">'+panels+'</div><div class="mg-footer"><button class="mg-pill" data-action="mg-key">'+(state.me?.public_demo?'Вход редактора (необязательно)':'Ключ доступа к CRM')+'</button><span>Настройки сохраняются в этом браузере.</span></div>');
 }
 function mgConnect(){
+ if(state.me?.public_demo){
+  modal('Подключение источников','<p>Демонстрационная CRM доступна без ключа, только для просмотра. Подключите внешнего агента через публичный MCP <code>/mcp-demo/</code>.</p><p class="muted">Почта, календарь и внешнее хранилище не подключены.</p><div class="dialog-actions"><button class="pill" data-close>Закрыть</button></div>');
+  return;
+ }
  modal('Подключение источников','<p>CRM использует существующий API и ключ доступа. Сервер предоставляет MCP по адресу <code>/mcp/</code>.</p><p class="muted">Для подключения внешней почты, календаря и хранилища документов нужны серверные интеграции. В этой версии они не настроены.</p><div class="dialog-actions"><button class="pill" data-action="mg-key">Ключ доступа к CRM</button><button class="pill" data-close>Закрыть</button></div>');
 }
 function mgRecords(items,kind,client){
