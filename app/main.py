@@ -32,7 +32,7 @@ from app.models import (
 )
 from app.store import Store
 from app.seed import seed
-from app.services import find, card, graph, context, check_evidence, check_relation, compare_maps
+from app.services import find, card, graph, context, check_evidence, check_relation, compare_maps, source_refs
 from app.ai import AI, worker, automatic_answer, analytic_intent, AUTOMATIC_LABEL
 from app.mcp_server import create_mcp
 from app.site_knowledge import help_answer
@@ -247,24 +247,24 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
         }
 
     @a.get("/api/v1/clients/{client_id}/people/{person_id}", tags=["People"])
-    def person(client_id: str, person_id: str, user: User):
+    def person(client_id: str, person_id: str, user: User, version: int | None = Query(None, ge=1)):
         access(client_id, user)
-        s = f.get(client_id)
+        s = snapshot_for(client_id, user, version)
         p = find(s.people, person_id)
+        relations = [r for r in s.relations if person_id in (r.from_person_id, r.to_person_id)]
+        interactions = sorted(
+            [i for i in s.interactions if person_id in i.person_ids],
+            key=lambda i: i.occurred_at, reverse=True,
+        )
+        ids = {ev.source_id for item in [p, *relations] for ev in item.evidence}
+        ids.update(i.source_id for i in interactions if i.source_id)
         return {
             "version": s.version,
             "person": p,
-            "relations": [
-                r
-                for r in s.relations
-                if person_id in (r.from_person_id, r.to_person_id)
-            ],
+            "relations": relations,
             "deals": [d for d in s.deals if person_id in d.participants],
-            "interactions": sorted(
-                [i for i in s.interactions if person_id in i.person_ids],
-                key=lambda i: i.occurred_at,
-                reverse=True,
-            ),
+            "interactions": interactions,
+            "source_refs": source_refs(s, ids),
         }
 
     @a.post("/api/v1/clients/{client_id}/people", status_code=201, tags=["People"])
@@ -447,9 +447,9 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
         }
 
     @a.get("/api/v1/clients/{client_id}/sources/{source_id}", tags=["Sources"])
-    def source(client_id: str, source_id: str, user: User):
+    def source(client_id: str, source_id: str, user: User, version: int | None = Query(None, ge=1)):
         access(client_id, user)
-        return find(f.get(client_id).sources, source_id)
+        return find(snapshot_for(client_id, user, version).sources, source_id)
 
     @a.post("/api/v1/clients/{client_id}/sources", status_code=201, tags=["Sources"])
     def add_source(

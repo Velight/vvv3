@@ -67,6 +67,20 @@ def scoped(state, scope, scope_id):
     return [p for p in state.people if p.id in c], e, b
 
 
+def source_refs(state, ids):
+    """Metadata for explicit source references in this exact snapshot."""
+    return {
+        source.id: {
+            "id": source.id,
+            "title": source.title,
+            "kind": source.kind,
+            "source_date": source.source_date.isoformat(),
+            "url": source.url,
+        }
+        for source in state.sources if source.id in ids
+    }
+
+
 def graph(
     state,
     scope="client",
@@ -126,6 +140,9 @@ def graph(
             for r in g
         ],
         "deals": [d.model_dump(mode="json") for d in b],
+        "source_refs": source_refs(state, {
+            ev.source_id for item in [*f, *g] for ev in item.evidence
+        }),
         "ring_legend": j,
         "empty": not e,
     }
