@@ -40,11 +40,15 @@ from app.site_knowledge import help_answer
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
-def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None):
+def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None, public_demo_ui=None):
     f = Store(db_path or os.getenv("DATABASE_PATH", "data/krok.db"))
     if keys is None:
         keys = json.loads(os.getenv("API_KEYS_JSON", "{}"))
-    if not keys:
+    if public_demo_ui is None:
+        # Enable keyless viewing on the designated prototype deployment only.
+        default_public = "true" if os.getenv("RENDER_EXTERNAL_HOSTNAME") == "vvv3.onrender.com" else "false"
+        public_demo_ui = os.getenv("PUBLIC_DEMO_UI", default_public).lower() == "true"
+    if not keys and not public_demo_ui:
         raise RuntimeError(
             "Set API_KEYS_JSON; see .env.example. No anonymous access is enabled."
         )
@@ -114,7 +118,15 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
         allow_headers=["Content-Type", "X-API-Key"],
     )
 
+    demo_ids = ("krasnodar", "vtb", "mvideo", "s7")
+
+    def visible_demo(snapshot):
+        return snapshot.id in demo_ids and snapshot.crm_id == f"demo-{snapshot.id}"
+
     def principal(key: str | None = Security(api_key_header)):
+        if public_demo_ui and not key:
+            return {"user_id": "public-ui-demo", "role": "viewer",
+                    "clients": list(demo_ids), "public_demo": True}
         for d, h in keys.items():
             if key is not None and secrets.compare_digest(key.encode(), d.encode()):
                 return h
@@ -125,8 +137,16 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
     def access(client_id, user, write=False):
         if "*" not in user["clients"] and client_id not in user["clients"]:
             raise HTTPException(404, "Client not found")
+        if user.get("public_demo") and not visible_demo(f.get(client_id)):
+            raise HTTPException(404, "Client not found")
         if write and user["role"] != "editor":
             raise HTTPException(403, "Editor role required")
+
+    def snapshot_for(client_id, user, version=None):
+        snapshot = f.get(client_id, version)
+        if user.get("public_demo") and not visible_demo(snapshot):
+            raise HTTPException(404, "Client or revision not found")
+        return snapshot
 
     def change(client_id, user, version, action, fn):
         access(client_id, user, True)
@@ -140,9 +160,9 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
     def me(user: User):
         return {
             **user,
-            "assistant_mode": ai.mode,
-            "assistant_model": ai.model,
-            "mcp_url": "/mcp/",
+            "assistant_mode": "analytics" if user.get("public_demo") else ai.mode,
+            "assistant_model": "" if user.get("public_demo") else ai.model,
+            "mcp_url": "/mcp-demo/" if user.get("public_demo") else "/mcp/",
         }
 
     @a.get("/api/v1/clients", tags=["Clients"])
@@ -156,6 +176,7 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
             s
             for s in f.all()
             if ("*" in user["clients"] or s.id in user["clients"])
+            and (not user.get("public_demo") or visible_demo(s))
             and q.casefold() in s.name.casefold()
         ]
         return {
@@ -183,7 +204,8 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
         access(client_id, user)
         if version > f.get(client_id).version:
             raise HTTPException(422, "Version exceeds current version")
-        f.mark_read(client_id, user["user_id"], version)
+        if not user.get("public_demo"):
+            f.mark_read(client_id, user["user_id"], version)
         return {"read_version": version}
 
     @a.get("/api/v1/clients/{client_id}/map", tags=["Map"])
@@ -200,7 +222,7 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
     ):
         access(client_id, user)
         return graph(
-            f.get(client_id, version),
+            snapshot_for(client_id, user, version),
             scope,
             scope_id,
             department,
@@ -455,6 +477,8 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
 
     @a.get("/api/v1/jobs/{job_id}", tags=["Sources"])
     def job(job_id: str, user: User):
+        if user.get("public_demo"):
+            raise HTTPException(404, "Job not found")
         d = f.job(job_id)
         access(d["client_id"], user)
         return d
@@ -472,6 +496,8 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
     @a.get("/api/v1/clients/{client_id}/chat/sessions", tags=["Assistant"])
     def sessions(client_id: str, user: User):
         access(client_id, user)
+        if user.get("public_demo"):
+            return {"items": []}
         f.get(client_id)
         with f.connection() as d:
             return {
@@ -487,6 +513,8 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
     @a.get("/api/v1/clients/{client_id}/chat/sessions/{session_id}", tags=["Assistant"])
     def chat_history(client_id: str, session_id: str, user: User):
         access(client_id, user)
+        if user.get("public_demo"):
+            raise HTTPException(404, "Session not found")
         with f.connection() as d:
             r = d.execute(
                 "SELECT * FROM sessions WHERE id=? AND actor=? AND client_id=?",
@@ -514,14 +542,15 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
                 from_version = numbers[0]
             if len(numbers) == 2:
                 target_version = numbers[1]
-        h = context(f.get(client_id, target_version), body.scope, body.scope_id)
-        i = f.session(
+        anonymous = bool(user.get("public_demo"))
+        h = context(snapshot_for(client_id, user, target_version), body.scope, body.scope_id)
+        i = [] if anonymous else f.session(
             body.session_id, user["user_id"], client_id, body.scope, body.scope_id
         )
         mode = "analytics"
         compared_version = None
         if intent == "compare":
-            selected = f.get(client_id, h["client"]["version"])
+            selected = snapshot_for(client_id, user, h["client"]["version"])
             previous = [r["version"] for r in f.history(client_id) if r["version"] < selected.version]
             compared_version = from_version
             if compared_version is None and previous:
@@ -529,8 +558,8 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
             if compared_version is None:
                 d = "Это первая сохранённая версия. Выберите другую версию для сравнения, когда она появится."
             else:
-                d = compare_maps(f.get(client_id, compared_version), selected, body.scope, body.scope_id)
-        elif intent != "auto" or ai.mode != "llm" or help_answer(body.message, h):
+                d = compare_maps(snapshot_for(client_id, user, compared_version), selected, body.scope, body.scope_id)
+        elif anonymous or intent != "auto" or ai.mode != "llm" or help_answer(body.message, h):
             d = automatic_answer(body.message, h, intent)
         else:
             try:
@@ -546,7 +575,8 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
             {"role": "user", "content": body.message, "created_at": now()},
             {"role": "assistant", "content": d, "created_at": now()},
         ]
-        f.save_chat(j, user["user_id"], client_id, body.scope, body.scope_id, i)
+        if not anonymous:
+            f.save_chat(j, user["user_id"], client_id, body.scope, body.scope_id, i)
         return {
             "session_id": j,
             "mode": mode,

@@ -163,23 +163,29 @@ function chatState(){const k=chatKey();if(!state.chats.has(k))state.chats.set(k,
 function renderAssistant(){const live=$('#assistant-panel');if(!live)return;const oldLog=live.querySelector('.chat-log'),atBottom=!oldLog||oldLog.scrollHeight-oldLog.scrollTop-oldLog.clientHeight<24;updatePanel('assistant-panel',renderAssistantContent);const log=live.querySelector('.chat-log');if(log&&atBottom)log.scrollTop=log.scrollHeight}
 function renderAssistantContent(r){const c=chatState();r.classList.toggle('collapsed',state.collapsed.assistant);r.innerHTML=panelHead('assistant','Ассистент');if(state.collapsed.assistant)return;const draft=c.draft||'';r.innerHTML+='<div class="assistant-tools" aria-label="Аналитика карты">'+[['copilot-summary','Сводка'],['copilot-compare','Сравнить версии'],['copilot-recommendations','Рекомендации'],['copilot-help','Помощь']].map(([action,label])=>'<button type="button" class="pill" data-action="'+action+'" '+(c.loading||historyPending?'disabled':'')+'>'+label+'</button>').join('')+'</div><button type="button" class="pill agent-connect" data-action="connect-agent">Подключить своего агента</button><div class="chat-log" role="log">'+c.messages.map(m=>'<div class="bubble '+(m.role==='user'?'user':'assistant')+'">'+esc(m.content)+'</div>').join('')+(c.loading?'<div class="bubble assistant muted">Думаю…</div>':'')+'<div class="small muted">Контекст: версия '+state.graph.version+'. Сводка и рекомендации — автоматическая аналитика.</div>'+'</div><form class="chat-form" id="chat-form">'+button('add-source','plus','Добавить источник','',!editor()||!current())+'<input id="chat-input" aria-label="Сообщение ассистенту" placeholder="Есть мысли?" maxlength="4000" value="'+esc(draft)+'" '+(historyPending?'disabled':'')+'><button type="submit" aria-label="Отправить" '+(c.loading||historyPending?'disabled':'')+'>'+I('send')+'</button></form>'}
 async function loadChat(){const c=chatState(),k=chatKey(),epoch=state.epoch;if(c.loaded||c.loading)return;c.loaded=true;if(!current())return;try{const r=await api(path('/chat/sessions'));const s=r.items.find(s=>s.scope===state.scope&&(s.scope_id||null)===(state.scopeId||null));if(epoch!==state.epoch||k!==chatKey())return;if(s){const d=await api(path('/chat/sessions/'+encodeURIComponent(s.id)));if(epoch===state.epoch&&k===chatKey()&&!c.loading){c.session=d.id;c.messages=d.messages;renderAssistant()}}}catch(e){c.loaded=false;if(epoch===state.epoch)fail(e)}}
-async function sendChat(message,options={}){if(!message.trim()||historyPending)return;const c=chatState(),k=chatKey(),epoch=state.epoch;if(c.loading)return;const previous=c.messages.slice();c.messages.push({role:'user',content:message});c.loading=true;c.draft='';renderAssistant();try{const body={message,scope:state.scope,scope_id:state.scopeId,session_id:c.session,version:state.graph.version,...options};const r=await api(path('/chat'),{method:'POST',body:JSON.stringify(body)});c.messages=r.messages;c.session=r.session_id;c.loaded=true}catch(e){c.messages=previous;c.draft=message;fail(e)}finally{c.loading=false;if(epoch===state.epoch&&k===chatKey())renderAssistant()}}
+async function sendChat(message,options={}){if(!message.trim()||historyPending)return;const c=chatState(),k=chatKey(),epoch=state.epoch;if(c.loading)return;const previous=c.messages.slice();c.messages.push({role:'user',content:message});c.loading=true;c.draft='';renderAssistant();try{const body={message,scope:state.scope,scope_id:state.scopeId,session_id:c.session,version:state.graph.version,...options};const r=await api(path('/chat'),{method:'POST',body:JSON.stringify(body)});c.messages=state.me?.public_demo?[...previous,...r.messages]:r.messages;c.session=state.me?.public_demo?null:r.session_id;c.loaded=true}catch(e){c.messages=previous;c.draft=message;fail(e)}finally{c.loading=false;if(epoch===state.epoch&&k===chatKey())renderAssistant()}}
 function compareVersions(){
  const vs=versions(),selected=state.graph.version,index=vs.indexOf(selected),previous=vs[Math.max(0,index-1)];
  formModal('Сравнение версий','<p>Сравнить сохранённый снимок с версией '+selected+' в выбранном контексте.</p><label>Исходная версия<select name="compare_version">'+vs.map(v=>'<option value="'+v+'" '+(v===previous?'selected':'')+'>Версия '+v+'</option>').join('')+'</select></label>',async f=>{await sendChat('Сравнить версии '+f.get('compare_version')+' → '+selected,{intent:'compare',compare_version:Number(f.get('compare_version'))})},'Сравнить');
 }
 let agentController;
+function agentMcpPath(){return state.me?.public_demo?'/mcp-demo/':'/mcp/'}
 function connectAgent(){
- modal('Подключить своего агента','<div class="dialog-form"><label>Клиент<select id="agent-client"><option value="codex">GPT через Codex MCP</option><option value="claude">Claude Desktop</option><option value="custom">Custom MCP</option></select></label><label>Адрес MCP<input readonly value="'+esc(location.origin+'/mcp/')+'"></label><p id="agent-status" role="status">Доступность ещё не проверена.</p><button type="button" class="pill" data-action="check-agent">Проверить сервер</button><div id="agent-instructions"></div><p class="small muted">Проверка выполняется из этого браузера с текущим ключом. Она не подтверждает подключение внешнего агента. Его ответы остаются в Codex, Claude или другом MCP-клиенте.</p></div>');
+ modal('Подключить своего агента','<div class="dialog-form"><label>Клиент<select id="agent-client"><option value="codex">GPT через Codex MCP</option><option value="claude">Claude Desktop</option><option value="custom">Custom MCP</option></select></label><label>Адрес MCP<input readonly value="'+esc(location.origin+agentMcpPath())+'"></label><p id="agent-status" role="status">Доступность ещё не проверена.</p><button type="button" class="pill" data-action="check-agent">Проверить сервер</button><div id="agent-instructions"></div><p class="small muted">Проверка выполняется из этого браузера. Она не подтверждает подключение внешнего агента. Его ответы остаются в Codex, Claude или другом MCP-клиенте.</p></div>');
  agentInstructions();checkAgent();
 }
 function agentInstructions(){
  const target=$('#agent-instructions');if(!target)return;
- const kind=$('#agent-client').value,url=location.origin+'/mcp/';
+ const kind=$('#agent-client').value,url=location.origin+agentMcpPath();
  const code=text=>'<pre class="agent-config"><code>'+esc(text)+'</code></pre>';
  const local=location.hostname==='localhost'||location.hostname==='127.0.0.1';
  let html='';
- if(kind==='codex')html='<p>В терминале на компьютере с проектом выполните из папки vvv3:</p>'+code('codex mcp add krok -- "$(pwd)/.venv/bin/python" "$(pwd)/scripts/mcp_stdio.py"\ncodex mcp list')+'<p>Мост берёт ключ просмотра из локального .env. Откройте новый чат Codex и попросите вызвать list_clients. Ответ будет в Codex.</p><p>Для прямого HTTP-подключения задайте KROK_API_KEY в окружении процесса Codex (ключ просмотра из ACCESS.txt), затем:</p>'+code('codex mcp add krok-http --url '+url+' --bearer-token-env-var KROK_API_KEY')+'<p><a href="https://learn.chatgpt.com/docs/extend/mcp" target="_blank" rel="noopener noreferrer">Инструкция Codex MCP</a></p>';
+ if(state.me?.public_demo){
+  if(kind==='codex')html='<p>Подключите открытый MCP в терминале:</p>'+code('codex mcp add krok --url '+url)+'<p>В новом чате Codex попросите вызвать list_clients.</p>';
+  else if(kind==='claude')html='<p>В Claude откройте Customize → Connectors → Add custom connector. Вставьте адрес выше и выберите подключение без авторизации.</p>';
+  else html='<p>В ChatGPT (при доступности пользовательских MCP) или другом MCP-клиенте добавьте указанный URL. Transport: Streamable HTTP. Authentication: No Authentication. Доступны только демонстрационные данные и 8 инструментов чтения.</p>';
+ }
+ else if(kind==='codex')html='<p>В терминале на компьютере с проектом выполните из папки vvv3:</p>'+code('codex mcp add krok -- "$(pwd)/.venv/bin/python" "$(pwd)/scripts/mcp_stdio.py"\ncodex mcp list')+'<p>Мост берёт ключ просмотра из локального .env. Откройте новый чат Codex и попросите вызвать list_clients. Ответ будет в Codex.</p><p>Для прямого HTTP-подключения задайте KROK_API_KEY в окружении процесса Codex (ключ просмотра из ACCESS.txt), затем:</p>'+code('codex mcp add krok-http --url '+url+' --bearer-token-env-var KROK_API_KEY')+'<p><a href="https://learn.chatgpt.com/docs/extend/mcp" target="_blank" rel="noopener noreferrer">Инструкция Codex MCP</a></p>';
  else if(kind==='claude')html='<p>После python3 scripts/setup.py добавьте секцию krok из claude-desktop-mcp.json в mcpServers конфигурации Claude Desktop (Settings → Developer → Edit Config). Перезапустите Claude Desktop.</p>'+code(JSON.stringify({mcpServers:{krok:{command:'/absolute/path/vvv3/.venv/bin/python',args:['/absolute/path/vvv3/scripts/mcp_stdio.py']}}},null,2))+'<p>Замените пути на абсолютные пути вашего проекта. На Windows: .venv\\Scripts\\python.exe. Ключ просмотра читается из .env мостом; в JSON он не нужен. Для удалённого сервера задайте мосту KROK_MCP_URL.</p>';
  else html='<p>Transport: Streamable HTTP. Укажите адрес выше и Authorization: Bearer &lt;ключ просмотра&gt; в защищённых настройках вашего MCP-клиента. Если он поддерживает только stdio, используйте scripts/mcp_stdio.py.</p><p>Порядок проверки: initialize → notifications/initialized → tools/list → tools/call (list_clients). Сервер предоставляет 8 инструментов только для чтения. OAuth не реализован.</p>';
  target.innerHTML=html+'<p class="small muted">'+(local?'Этот адрес доступен только с компьютера, где работает сервер. Для удалённого клиента нужен доступный ему HTTPS-адрес и PUBLIC_HOSTS.':'Для внешнего клиента проверьте доступность этого адреса из его сети и настройку PUBLIC_HOSTS.')+' Сервер приложения должен работать; Ollama не требуется.</p>';
@@ -190,15 +196,15 @@ async function checkAgent(){
  status.textContent='Проверяю MCP…';button.disabled=true;
  const timer=setTimeout(()=>controller.abort(),5000);
  try{
-  const headers={'Authorization':'Bearer '+state.key,'Content-Type':'application/json','Accept':'application/json, text/event-stream'};
+  const headers={...(state.me?.public_demo?{}:{'Authorization':'Bearer '+state.key}),'Content-Type':'application/json','Accept':'application/json, text/event-stream'};
   async function rpc(method,params,id){
-   const r=await fetch('/mcp/',{method:'POST',headers,signal:controller.signal,body:JSON.stringify({jsonrpc:'2.0',id,method,params})});
+   const r=await fetch(agentMcpPath(),{method:'POST',headers,signal:controller.signal,body:JSON.stringify({jsonrpc:'2.0',id,method,params})});
    if(!r.ok)throw new Error(r.status===401?'Ключ не принят (401).':'MCP ответил HTTP '+r.status+'.');
    const body=await r.json();if(body.error||!body.result)throw new Error('Некорректный ответ MCP.');return body.result;
   }
   const init=await rpc('initialize',{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'krok-availability-check',version:'1'}},1);
   headers['MCP-Protocol-Version']=init.protocolVersion;
-  const ready=await fetch('/mcp/',{method:'POST',headers,signal:controller.signal,body:JSON.stringify({jsonrpc:'2.0',method:'notifications/initialized',params:{}})});
+  const ready=await fetch(agentMcpPath(),{method:'POST',headers,signal:controller.signal,body:JSON.stringify({jsonrpc:'2.0',method:'notifications/initialized',params:{}})});
   if(!ready.ok)throw new Error('MCP не подтвердил инициализацию (HTTP '+ready.status+').');
   const result=await rpc('tools/list',{},2);
   const expected=['list_clients','get_client_map','get_contact','get_client_history','get_client_context','get_source','list_sources','get_site_help'];
@@ -263,4 +269,15 @@ document.addEventListener('change',e=>{if(e.target.id==='agent-client')agentInst
 document.addEventListener('input',e=>{if(e.target.id==='timeline'){stopHistory();state.graphEpoch++;const t=e.target,index=Number(t.value);historyPending=true;previewHistory(index);renderContact();renderAssistant();historyTimer=setTimeout(()=>setVersion(index).catch(fail),70)}if(e.target.id==='chat-input')chatState().draft=e.target.value});
 document.addEventListener('submit',e=>{if(e.target.id==='chat-form'){e.preventDefault();sendChat($('#chat-input').value)}});
 dialog.addEventListener('close',()=>{agentController?.abort();renderDock(app.querySelector('.management-screen')?.dataset.section||'map')});
-(async()=>{renderDock();if(!state.key){settings(true);return}try{state.me=await api('/me');await showClients()}catch(e){settings(true);if(e.status!==401)toast(e.message)}})();
+(async()=>{
+ renderDock();
+ try{
+  try{state.me=await api('/me')}
+  catch(e){
+   if(e.status!==401||!state.key)throw e;
+   state.key='';sessionStorage.removeItem('krok_api_key');
+   state.me=await api('/me');
+  }
+  await showClients();
+ }catch(e){if(e.status===401)settings(true);else{app.innerHTML='<div class="error-screen">'+esc(e.message)+'<p>Обновите страницу для повторного подключения.</p></div>'}}
+})();
