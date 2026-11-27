@@ -2,6 +2,8 @@ name: UI screenshots and interaction
 on:
   push:
     branches: [frontend-pr2, main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
@@ -86,6 +88,33 @@ jobs:
                   page.screenshot(path="ui-capture/06-history.png")
                   page.get_by_role("button",name="Следующая версия").click()
                   page.locator(".timeline-label").filter(has_text="Текущая версия").wait_for()
+                  page.get_by_role("button", name="Источники", exact=True).click()
+                  page.locator(".mg-catalog-card").first.wait_for()
+                  assert page.locator(".mg-catalog-card").count() == 4
+                  page.screenshot(path="ui-capture/11-sources.png")
+                  for category in ("crm", "mail", "calendar", "docs"):
+                      page.locator('[data-action="mg-open:'+category+'"]').click()
+                      page.locator(".mg-detail-card").first.wait_for()
+                      page.wait_for_function("!document.querySelector('[data-action=mg-refresh]').disabled")
+                      page.screenshot(path="ui-capture/12-"+category+".png")
+                      assert page.locator(".mg-detail-card").count() == 2
+                      if category == "crm":
+                          switch = page.get_by_role("switch", name="Найти контакт")
+                          switch.click()
+                          assert switch.get_attribute("aria-checked") == "false"
+                          switch.click()
+                          assert switch.get_attribute("aria-checked") == "true"
+                          page.get_by_role("button", name="Контакты Имена", exact=False).click()
+                          page.locator("#mg-record-search").wait_for()
+                          page.get_by_role("button",name="Закрыть").click()
+                      page.get_by_role("button",name="К источникам").click()
+                  page.get_by_role("button",name="Настройки",exact=True).click()
+                  page.locator(".mg-settings-card").first.wait_for()
+                  switch = page.get_by_role("switch",name="Показывать только проверенные связи")
+                  switch.click()
+                  assert switch.get_attribute("aria-checked") == "true"
+                  switch.click()
+                  page.screenshot(path="ui-capture/16-settings.png")
                   if errors:
                       raise AssertionError(errors)
               finally:
