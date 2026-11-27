@@ -227,3 +227,29 @@ dialog[open]::backdrop{animation:shade-enter var(--motion-ui) var(--motion-ease)
  .map-screen[data-mobile-panel="assistant"] .mobile-shade,.map-screen[data-mobile-panel="contact"] .mobile-shade{animation:shade-enter 180ms var(--motion-ease) both}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+
+/* CRM review, same surface and semantic colors as the contact card. */
+.proposal-entry{margin-bottom:8px;min-height:30px;font-size:12px;flex-shrink:0}
+.proposal-intro{font-size:13px;line-height:1.45;margin-bottom:12px}
+.proposal-intro p{margin:5px 0}
+.proposal-intro h3{margin:0;font-size:16px;font-weight:650;overflow-wrap:anywhere}
+.proposal-intro>span{font-size:12px;color:var(--muted)}
+.proposal-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.proposal-toolbar .pill{flex:1}
+.proposal-list{display:grid;gap:10px}
+.proposal-row,.proposal-change{border:1px solid var(--edge);background:var(--bg);border-radius:16px;padding:13px;text-align:left;overflow-wrap:anywhere}
+.proposal-row:hover{border-color:#13a96c55}
+.proposal-row-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.proposal-status{font-size:11px;white-space:nowrap;line-height:1.5;color:var(--muted)}
+.proposal-status.open{color:#a46b10}.proposal-status.merged{color:#087d51}.proposal-status.rejected{color:#a54545}
+.proposal-change{font-size:13px;line-height:1.45}
+.proposal-change>b{display:block;margin:4px 0 8px}
+.proposal-field{margin:8px 0;display:grid;gap:3px}
+.proposal-minus,.proposal-plus{border-radius:6px;padding:5px 8px;white-space:pre-wrap}
+.proposal-minus{background:#f8eaea;color:#923b3b}
+.proposal-plus{background:#e5f4ec;color:#08734a}
+.proposal-evidence{margin-top:12px;border-top:1px solid var(--edge);padding-top:8px}
+.proposal-evidence b{display:block;font-size:12px}
+.proposal-evidence blockquote{margin:5px 0 0;padding-left:9px;border-left:2px solid #d5e5dc;color:var(--muted)}
+.proposal-back{margin:0 0 8px auto}
+@media(max-width:700px){.proposal-row{min-height:54px}.proposal-toolbar .pill{min-height:44px}}

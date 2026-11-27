@@ -27,6 +27,8 @@ class Store:
             CREATE TABLE IF NOT EXISTS sessions(
                 id TEXT PRIMARY KEY, actor TEXT NOT NULL, client_id TEXT NOT NULL,
                 scope TEXT NOT NULL, scope_id TEXT, messages TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS proposals(id TEXT PRIMARY KEY, client_id TEXT NOT NULL, demo INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL);
+            CREATE INDEX IF NOT EXISTS proposals_client ON proposals(client_id);
             CREATE TABLE IF NOT EXISTS reads(
                 actor TEXT NOT NULL, client_id TEXT NOT NULL, version INTEGER NOT NULL,
                 PRIMARY KEY(actor, client_id));
