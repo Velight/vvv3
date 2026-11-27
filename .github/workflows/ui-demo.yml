@@ -91,6 +91,41 @@ jobs:
               finally:
                   context.close()
                   browser.close()
+              browser = p.chromium.launch()
+              context = browser.new_context(viewport={"width":390,"height":844},is_mobile=True,has_touch=True,device_scale_factor=1)
+              page = context.new_page()
+              errors = []
+              page.on("pageerror", lambda error: errors.append(str(error)))
+              try:
+                  page.goto("http://127.0.0.1:8000/")
+                  page.locator("input[name=key]").fill("local-demo")
+                  page.get_by_role("button",name="Подключиться").click()
+                  page.locator(".client-card").first.wait_for()
+                  assert page.evaluate("document.documentElement.scrollWidth === innerWidth")
+                  page.screenshot(path="ui-capture/07-mobile-clients.png")
+                  page.locator('[data-client="krasnodar"]').tap()
+                  page.locator(".graph .person").first.wait_for()
+                  assert not page.locator("#contact-panel").is_visible()
+                  assert page.evaluate("document.documentElement.scrollWidth === innerWidth")
+                  page.screenshot(path="ui-capture/08-mobile-map.png")
+                  page.get_by_role("button",name="Список контактов").tap()
+                  page.locator(".mobile-person-choice").first.tap()
+                  assert page.locator("#contact-panel").is_visible()
+                  page.screenshot(path="ui-capture/09-mobile-contact.png")
+                  page.locator("#contact-panel .panel-heading button").tap()
+                  assert not page.locator("#contact-panel").is_visible()
+                  page.locator('[data-action="mobile-assistant"]').tap()
+                  page.locator("#chat-input").fill("Кто принимает решения?")
+                  page.locator("#chat-form button[type=submit]").tap()
+                  page.locator(".bubble.assistant").last.wait_for()
+                  page.screenshot(path="ui-capture/10-mobile-assistant.png")
+                  page.locator("#assistant-panel .panel-heading button").tap()
+                  page.get_by_role("button",name="Предыдущая версия").tap()
+                  page.locator(".timeline-label.historical").wait_for()
+                  assert not errors, errors
+              finally:
+                  context.close()
+                  browser.close()
           PY
       - uses: actions/upload-artifact@v4
         if: always()
