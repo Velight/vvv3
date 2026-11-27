@@ -8,7 +8,7 @@ const K={influences:'Влияет',reports_to:'Подчиняется',collabora
 const S={proposed:'Предложено',confirmed:'Подтверждено',rejected:'Отклонено'};
 const state={key:sessionStorage.getItem('krok_api_key')||'',me:null,clients:[],client:null,graph:null,fullPeople:[],deals:[],history:[],version:null,scope:'client',scopeId:null,selected:null,edge:null,detail:null,filter:{},collapsed:{assistant:false,contact:false},chats:new Map(),pending:false,epoch:0,graphEpoch:0};
 const mobileQuery=matchMedia('(max-width: 700px)');
-let mobilePanel='', mobileZoom=1.5, mobileCentered=false;
+let mobilePanel='', mobileZoom=1.5, mobileCentered=false, zoomFrame=0, zoomTarget=null;
 function mobileSheet(type){
  if(!mobileQuery.matches)return;
  mobilePanel=type===mobilePanel?'':type;
@@ -25,20 +25,35 @@ function applyMobile(){
  for(const type of ['assistant','contact']){
   const toggle=screen.querySelector('[data-action="mobile-'+type+'"]');
   if(toggle)toggle.setAttribute('aria-expanded',String(mobilePanel===type));
+  const panel=screen.querySelector('#'+type+'-panel');
+  if(panel)panel.inert=mobileQuery.matches&&mobilePanel!==type;
  }
  const stage=$('#graph-content');
  if(stage){stage.style.setProperty('--mobile-zoom',mobileZoom);if(mobileQuery.matches&&!mobileCentered){mobileCentered=true;stage.scrollLeft=(stage.scrollWidth-stage.clientWidth)/2;stage.scrollTop=(stage.scrollHeight-stage.clientHeight)/2}}
 }
+function cancelZoom(){cancelAnimationFrame(zoomFrame);zoomFrame=0;zoomTarget=null}
 function mobileScale(delta){
- const stage=$('#graph-content');if(!stage)return;
+ const stage=$('#graph-content');if(!stage||!mobileQuery.matches)return;
  const x=(stage.scrollLeft+stage.clientWidth/2)/Math.max(1,stage.scrollWidth),y=(stage.scrollTop+stage.clientHeight/2)/Math.max(1,stage.scrollHeight);
- mobileZoom=delta===0?1:Math.max(1,Math.min(2.5,mobileZoom+delta));applyMobile();
- stage.scrollLeft=x*stage.scrollWidth-stage.clientWidth/2;stage.scrollTop=y*stage.scrollHeight-stage.clientHeight/2;
+ const from=mobileZoom,target=delta===0?1:Math.max(1,Math.min(2.5,(zoomTarget??mobileZoom)+delta));
+ cancelZoom();zoomTarget=target;
+ const began=performance.now();
+ function frame(now){
+  if(!stage.isConnected||!mobileQuery.matches){cancelZoom();return}
+  const t=reducedMotion.matches?1:Math.min(1,(now-began)/240),ease=1-Math.pow(1-t,3);
+  mobileZoom=from+(target-from)*ease;
+  stage.style.setProperty('--mobile-zoom',mobileZoom);
+  stage.scrollLeft=x*stage.scrollWidth-stage.clientWidth/2;stage.scrollTop=y*stage.scrollHeight-stage.clientHeight/2;
+  if(t<1)zoomFrame=requestAnimationFrame(frame);else cancelZoom();
+ }
+ frame(began);
 }
+document.addEventListener('pointerdown',e=>{if(e.target.closest('#graph-content'))cancelZoom()},{passive:true});
+document.addEventListener('wheel',e=>{if(e.target.closest('#graph-content'))cancelZoom()},{passive:true});
 function mobileContacts(){
  modal('Контакты · '+state.client.name,'<div class="detail-list">'+(state.graph.nodes.length?state.graph.nodes.map(n=>'<button class="detail-item mobile-person-choice '+(n.id===state.selected&&!state.edge?'selected':'')+'" aria-pressed="'+(n.id===state.selected&&!state.edge)+'" data-mobile-person="'+esc(n.id)+'"><b>'+esc(n.data.name)+'</b><span class="muted small">'+esc(n.data.title||n.data.department||'Контакт')+'</span></button>').join(''):'<p class="muted">Нет контактов</p>')+'</div>');
 }
-mobileQuery.addEventListener('change',()=>{mobilePanel='';mobileCentered=false;applyMobile()});
+mobileQuery.addEventListener('change',()=>{cancelZoom();mobilePanel='';mobileCentered=false;applyMobile()});
 const editor=()=>state.me?.role==='editor';
 const path=(suffix='')=>'/clients/'+encodeURIComponent(state.client.id)+suffix;
 let historyTimer, historyPending=false;
@@ -86,38 +101,62 @@ function syncChildren(root,fresh,keepPanels=false){
  }
  for(const o of old)if(!used.has(o))o.remove();
 }
-function updateMapShell(html){
- const live=app.querySelector('.map-screen');
- if(!live){app.innerHTML=html;return}
- const oldEdges=new Map([...live.querySelectorAll('[data-edge]')].map(el=>[el.dataset.edge,['x1','y1','x2','y2'].map(k=>Number(el.getAttribute(k)))]));
- const oldPeople=new Set([...live.querySelectorAll('.graph [data-person]')].map(el=>el.dataset.person));
- const t=document.createElement('template');t.innerHTML=html;
- syncNode(live,t.content.firstElementChild,true);
- animateEdges(live,oldEdges);
- if(!reducedMotion.matches){
-  for(const node of live.querySelectorAll('.graph [data-person]')){
-   if(!oldPeople.has(node.dataset.person))node.animate([{opacity:.55},{opacity:1}],{duration:180,easing:motionEase});
-  }
- }
-}
+// A single clock for contacts and links. Retarget from the currently displayed
+// geometry rather than a previous snapshot's final position.
 const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
 const motionEase='cubic-bezier(.333,1,.667,1)';
-const graphMotionMs=300;
-let edgeFrame;
-function animateEdges(root,previous){
- cancelAnimationFrame(edgeFrame);
- if(reducedMotion.matches)return;
- const attrs=['x1','y1','x2','y2'];
- const moves=[...root.querySelectorAll('[data-edge]')].filter(el=>previous.has(el.dataset.edge)).map(el=>({el,from:previous.get(el.dataset.edge),to:attrs.map(k=>Number(el.getAttribute(k)))})).filter(m=>m.from.some((v,i)=>v!==m.to[i]));
- if(!moves.length)return;
- const start=performance.now();
- function frame(now){
-  if(!root.isConnected)return;
-  const t=reducedMotion.matches?1:Math.min(1,(now-start)/graphMotionMs),ease=1-Math.pow(1-t,3);
-  for(const m of moves)attrs.forEach((k,i)=>m.el.setAttribute(k,m.from[i]+(m.to[i]-m.from[i])*ease));
-  if(t<1)edgeFrame=requestAnimationFrame(frame);
+const graphMotionMs=340;
+let graphFrame=0;
+function displayedPositions(root){
+ const positions=new Map();
+ for(const node of root.querySelectorAll('.graph [data-person]')){
+  const transform=node.transform.baseVal.getItem(0).matrix;
+  positions.set(node.dataset.person,[transform.e,transform.f]);
  }
- frame(start);
+ return positions;
+}
+function updateMapShell(html){
+ const live=app.querySelector('.map-screen');
+ cancelAnimationFrame(graphFrame);graphFrame=0;
+ if(!live){app.innerHTML=html;return}
+ const previous=displayedPositions(live);
+ const oldEdges=new Set([...live.querySelectorAll('.graph [data-edge]')].map(el=>el.dataset.edge));
+ const t=document.createElement('template');t.innerHTML=html;
+ syncNode(live,t.content.firstElementChild,true);
+ if(reducedMotion.matches)return;
+ const targets=displayedPositions(live);
+ const nodes=[...live.querySelectorAll('.graph [data-person]')].map(el=>{
+  const id=el.dataset.person,to=targets.get(id),from=previous.get(id)||to;
+  if(!previous.has(id))el.animate([{opacity:.55},{opacity:1}],{duration:200,easing:motionEase});
+  return {el,id,from,to};
+ });
+ const edgeModels=new Map(state.graph.edges.map(e=>[e.id,e]));
+ const edges=[...live.querySelectorAll('.graph [data-edge]')].map(el=>{
+  if(!oldEdges.has(el.dataset.edge))el.animate([{opacity:0},{opacity:el.classList.contains('proposed')&&!el.classList.contains('selected')?.65:1}],{duration:200,easing:motionEase});
+  return {el,model:edgeModels.get(el.dataset.edge)};
+ });
+ if(!nodes.some(n=>n.from.some((v,i)=>v!==n.to[i])))return;
+ const began=performance.now(),points=new Map();
+ function frame(now){
+  if(!live.isConnected){graphFrame=0;return}
+  const t=reducedMotion.matches?1:Math.min(1,(now-began)/graphMotionMs),ease=1-Math.pow(1-t,3);
+  for(const n of nodes){
+   const xy=n.from.map((v,i)=>v+(n.to[i]-v)*ease);
+   points.set(n.id,xy);
+   n.el.setAttribute('transform','translate('+xy.join(' ')+')');
+  }
+  for(const {el,model} of edges){
+   if(!model)continue;
+   const from=points.get(model.source),to=points.get(model.target);
+   if(!from||!to)continue;
+   // The card is drawn at center minus (57,18), so link endpoints
+   // use the same positions and remain attached throughout the transition.
+   el.setAttribute('x1',from[0]+57);el.setAttribute('y1',from[1]+18);
+   el.setAttribute('x2',to[0]+57);el.setAttribute('y2',to[1]+18);
+  }
+  if(t<1)graphFrame=requestAnimationFrame(frame);else graphFrame=0;
+ }
+ frame(began);
 }
 function updatePanel(id,render){
  const live=document.getElementById(id);if(!live)return;
@@ -133,8 +172,8 @@ function formModal(title,body,submit,label='Сохранить'){
 }
 function settings(required=false){renderDock('settings');formModal('Подключение к CRM','<p>Введите ключ доступа, настроенный на сервере. Он хранится только в текущей вкладке браузера.</p><label>API-ключ<input name="key" type="password" required autocomplete="off" value="'+esc(state.key)+'"></label>'+(state.me?'<p class="muted">Роль: '+esc(editor()?'Редактор':'Просмотр')+' · Ассистент: '+esc(state.me.assistant_mode)+'</p>':''),async f=>{const old=state.key;state.key=String(f.get('key')).trim();try{const me=await api('/me');state.me=me;sessionStorage.setItem('krok_api_key',state.key);state.chats.clear();await showClients()}catch(e){state.key=old;throw e}},'Подключиться');if(required)app.innerHTML='<div class="error-screen">Для работы с картой необходимо подключение к CRM.<p><button class="pill" data-action="settings">Ввести API-ключ</button></p></div>'}
 function renderClients(){renderDock();app.innerHTML='<section class="screen clients" aria-label="Клиенты">'+(state.clients.length?state.clients.map(c=>{const n=c.contacts_count||0,u=c.updates_count||0,v=c.coverage||{},logo=brandUrl(c.id),ratio=v.ratio==null?0:Math.max(0,Math.min(1,v.ratio));return '<button class="client-card" data-client="'+esc(c.id)+'"><div class="client-head"><span class="client-name">'+esc(c.name)+'</span><span class="count">'+(n?n+' '+noun(n,['контакт','контакта','контактов']):'нет контактов')+'</span></div><div class="updates '+(u?'active':'')+'">'+I('mail')+'<span>'+(u?u+' '+noun(u,['обновление','обновления','обновлений']):n?'Нет обновлений':'Пусто')+'</span></div>'+(logo?'<img class="brand" src="'+logo+'" alt="">':'<span class="brand brand-fallback">'+esc(c.name.slice(0,2))+'</span>')+'<div class="coverage"><div class="coverage-label">Охват ЛПР <strong>'+(v.total?v.covered+' из '+v.total:'Нет данных')+'</strong></div><div class="progress"><span style="width:'+ratio*100+'%"></span></div></div><div class="card-arrow">'+I('cardright')+'</div></button>'}).join(''):'<div class="empty-list">Нет доступных клиентов</div>')+'</section>'}
-async function showClients(){mobilePanel='';mobileCentered=false;stopHistory();const token=++state.epoch;state.graphEpoch++;state.client=null;state.graph=null;state.detail=null;renderDock();app.innerHTML='<div class="startup">Загрузка клиентов…</div>';try{const r=await api('/clients');if(token!==state.epoch)return;const order=['krasnodar','vtb','mvideo','s7'];const rank=id=>{const i=order.indexOf(id);return i<0?order.length:i};state.clients=r.items.slice().sort((a,b)=>rank(a.id)-rank(b.id)||a.name.localeCompare(b.name,'ru'));renderClients()}catch(e){if(token!==state.epoch)return;if(e.status===401)settings(true);else{app.innerHTML='<div class="error-screen">'+esc(e.message)+'<p><button class="pill" data-action="map">Повторить</button></p></div>'}}}
-async function openClient(id){mobilePanel='';mobileZoom=1.5;mobileCentered=false;stopHistory();const token=++state.epoch;state.graphEpoch++;state.client=state.clients.find(c=>c.id===id)||{id,name:id};Object.assign(state,{graph:null,fullPeople:[],deals:[],history:[],version:null,scope:'client',scopeId:null,selected:null,edge:null,detail:null,filter:{},collapsed:{assistant:false,contact:false}});if(!app.querySelector('.map-screen'))app.innerHTML='<div class="startup">Загрузка карты…</div>';try{const [c,p,d,h]=await Promise.all([api(path()),api(path('/people')),api(path('/deals')),api(path('/history'))]);if(token!==state.epoch)return;state.client=c;state.fullPeople=p.items;state.deals=d.items;state.history=h.items;await loadMap();if(token!==state.epoch)return;await api(path('/read?version='+c.version),{method:'POST'}).catch(()=>{});loadChat()}catch(e){if(token!==state.epoch)return;fail(e);app.innerHTML='<div class="error-screen">'+esc(e.message)+'<p><button class="pill" data-action="map">К клиентам</button></p></div>'}}
+async function showClients(){cancelZoom();mobilePanel='';mobileCentered=false;stopHistory();const token=++state.epoch;state.graphEpoch++;state.client=null;state.graph=null;state.detail=null;renderDock();app.innerHTML='<div class="startup">Загрузка клиентов…</div>';try{const r=await api('/clients');if(token!==state.epoch)return;const order=['krasnodar','vtb','mvideo','s7'];const rank=id=>{const i=order.indexOf(id);return i<0?order.length:i};state.clients=r.items.slice().sort((a,b)=>rank(a.id)-rank(b.id)||a.name.localeCompare(b.name,'ru'));renderClients()}catch(e){if(token!==state.epoch)return;if(e.status===401)settings(true);else{app.innerHTML='<div class="error-screen">'+esc(e.message)+'<p><button class="pill" data-action="map">Повторить</button></p></div>'}}}
+async function openClient(id){cancelZoom();mobilePanel='';mobileZoom=1.5;mobileCentered=false;stopHistory();const token=++state.epoch;state.graphEpoch++;state.client=state.clients.find(c=>c.id===id)||{id,name:id};Object.assign(state,{graph:null,fullPeople:[],deals:[],history:[],version:null,scope:'client',scopeId:null,selected:null,edge:null,detail:null,filter:{},collapsed:{assistant:false,contact:false}});if(!app.querySelector('.map-screen'))app.innerHTML='<div class="startup">Загрузка карты…</div>';try{const [c,p,d,h]=await Promise.all([api(path()),api(path('/people')),api(path('/deals')),api(path('/history'))]);if(token!==state.epoch)return;state.client=c;state.fullPeople=p.items;state.deals=d.items;state.history=h.items;await loadMap();if(token!==state.epoch)return;await api(path('/read?version='+c.version),{method:'POST'}).catch(()=>{});loadChat()}catch(e){if(token!==state.epoch)return;fail(e);app.innerHTML='<div class="error-screen">'+esc(e.message)+'<p><button class="pill" data-action="map">К клиентам</button></p></div>'}}
 function params(){const q=new URLSearchParams({scope:state.scope});if(state.scopeId)q.set('scope_id',state.scopeId);if(state.version!==null)q.set('version',state.version);for(const [k,v] of Object.entries(state.filter))if(v)q.set(k,v);if(mgPrefs.verified)q.set('status','confirmed');return q}
 async function loadMap(){stopHistory();const t=++state.graphEpoch,epoch=state.epoch;try{const g=await api(path('/map?')+params());if(t!==state.graphEpoch||epoch!==state.epoch)return;state.graph=g;if(current())state.client.version=g.version;if(!g.nodes.some(n=>n.id===state.selected))state.selected=g.nodes[0]?.id||null;if(!g.edges.some(e=>e.id===state.edge))state.edge=null;state.detail=null;renderMap();if(state.selected&&!state.edge)loadDetail()}catch(e){if(t!==state.graphEpoch||epoch!==state.epoch)return;if(e.status===404&&state.scope!=='client'){state.scope='client';state.scopeId=null;return loadMap()}throw e}}
 async function loadDetail(){const id=state.selected,epoch=state.epoch,t=state.graphEpoch,version=state.graph?.version;if(!id||!version||historyPending)return;try{const d=await api(path('/people/'+encodeURIComponent(id)+'?version='+version));if(epoch===state.epoch&&t===state.graphEpoch&&id===state.selected&&!state.edge&&d.version===state.graph.version){state.detail=d;renderContact()}}catch(e){if(epoch===state.epoch&&t===state.graphEpoch&&id===state.selected)fail(e)}}
@@ -350,7 +389,7 @@ async function action(a){if(a?.startsWith('fact-source:'))return verify(decodeUR
 document.addEventListener('click',ev=>{const el=ev.target.closest('[data-action],[data-close],[data-client],[data-person],[data-edge],[data-scope],[data-source],[data-process],[data-mobile-person]');if(!el||el.disabled)return;const d=el.dataset;try{let r;if('close'in d){dialog.close();return}if(d.mobilePerson){dialog.close();r=selectPerson(d.mobilePerson)}else if(d.client)r=openClient(d.client);else if(d.person)r=selectPerson(d.person);else if(d.edge)r=selectEdge(d.edge);else if(d.scope){const id=d.scope==='deal'?state.deals[0]?.id:d.scope==='person'?(state.selected||state.fullPeople[0]?.id):null;r=setScope(d.scope,id)}else if(d.source)r=showSource(d.source);else if(d.process)r=processSource(d.process);else r=action(d.action);Promise.resolve(r).catch(fail)}catch(e){fail(e)}});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&mobilePanel&&!dialog.open){mobilePanel='';applyMobile();return}if((e.key==='Enter'||e.key===' ')&&e.target.matches('svg [role="button"]')){e.preventDefault();const d=e.target.dataset;if(d.person)selectPerson(d.person);if(d.edge)selectEdge(d.edge)}});
 document.addEventListener('change',e=>{if(e.target.id==='agent-client')agentInstructions();if(e.target.id==='scope-select')setScope(state.scope,e.target.value).catch(fail);if(e.target.id==='timeline'){stopHistory();setVersion(Number(e.target.value)).catch(fail)}});
-document.addEventListener('input',e=>{if(e.target.id==='timeline'){stopHistory();state.graphEpoch++;const t=e.target,index=Number(t.value);historyPending=true;previewHistory(index);renderContact();renderAssistant();historyTimer=setTimeout(()=>setVersion(index).catch(fail),70)}if(e.target.id==='chat-input')chatState().draft=e.target.value});
+document.addEventListener('input',e=>{if(e.target.id==='timeline'){const alreadyPending=historyPending;stopHistory();state.graphEpoch++;const t=e.target,index=Number(t.value);historyPending=true;previewHistory(index);if(!alreadyPending){renderContact();renderAssistant()}historyTimer=setTimeout(()=>setVersion(index).catch(fail),45)}if(e.target.id==='chat-input')chatState().draft=e.target.value});
 document.addEventListener('submit',e=>{if(e.target.id==='chat-form'){e.preventDefault();sendChat($('#chat-input').value)}});
 dialog.addEventListener('close',()=>{agentController?.abort();renderDock(app.querySelector('.management-screen')?.dataset.section||'map')});
 (async()=>{
