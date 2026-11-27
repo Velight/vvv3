@@ -169,3 +169,34 @@ html::-webkit-scrollbar{display:none;width:0;height:0}
 .contact-body .fact-evidence blockquote{margin:4px 0;padding:4px 0 4px 9px;font-size:12px;line-height:1.4;overflow-wrap:anywhere}
 .contact-actions .fact-note{text-align:center}
 @media(max-width:700px){.fact-status,.fact-source,.fact-crm,.fact-item .fact-label{font-size:13px}.fact-source,.fact-crm{min-height:32px}.fact-note,.contact-body p.fact-note{font-size:12px}}
+
+/* Selected person: invert the card and avatar in every map scope and viewport. */
+.graph .person .avatar-bg{fill:var(--green);stroke:none;filter:none}
+.graph .person.selected > .person-card{fill:#087d51;stroke:#087d51;filter:drop-shadow(0 1px 3px #087d5133)}
+.graph .person.selected .node-name,.graph .person.selected .node-dept{fill:#fff}
+.graph .person.selected .avatar-bg{fill:#fff;stroke:none;filter:none}
+.graph .person.selected .person-avatar path,.graph .person.selected .person-avatar circle{fill:#087d51}
+.graph .person:focus-visible > .person-card{stroke-width:5}
+.mobile-person-choice.selected{background:#087d51;color:white}
+.mobile-person-choice.selected .muted{color:white}
+@media(max-width:700px){
+ /* Keep the global navigation on client list, sources and settings. */
+ body:has(#app > .map-screen) #dock{display:none}
+ .map-screen{padding:calc(10px + env(safe-area-inset-top)) 12px calc(10px + env(safe-area-inset-bottom));gap:10px;min-height:100dvh}
+ .map-screen .mobile-map-heading{order:0;align-items:center;padding:0 6px}
+ .mobile-map-heading h1{min-width:0;overflow-wrap:anywhere}
+ .mobile-map-meta{display:grid;justify-items:end;gap:2px;flex:none}
+ .mobile-back-link{font-size:12px;color:#087d51;text-decoration:underline;text-underline-offset:2px;padding:4px 0;white-space:nowrap;min-height:28px}
+ .map-screen .graph-area{order:1;flex:1 0 auto;min-height:0}
+ .map-screen #graph-content,.map-screen .graph-area:has(> .empty-map) #graph-content{height:clamp(280px,calc(100dvh - 284px - env(safe-area-inset-top) - env(safe-area-inset-bottom)),900px)!important;flex:none}
+ .map-screen .graph-area:has(> .scope-picker) #graph-content{height:clamp(260px,calc(100dvh - 326px - env(safe-area-inset-top) - env(safe-area-inset-bottom)),900px)!important}
+ .map-screen .graph-area:has(> .empty-map) #graph-content{height:clamp(260px,calc(100dvh - 326px - env(safe-area-inset-top) - env(safe-area-inset-bottom)),900px)!important}
+ .map-screen .timeline{order:2;display:grid;grid-template-columns:36px minmax(0,1fr) 36px;grid-template-rows:44px auto;gap:0 8px;margin:0}
+ .map-screen .timeline-label{grid-column:1/-1;position:static;transform:none;width:100%;margin:0;padding:0 4px;line-height:1.35}
+ .map-screen .mobile-panel-tabs{order:3;justify-content:center;align-items:center}
+ .map-screen .mobile-panel-tabs [data-action="mobile-assistant"]{flex:0 1 280px;width:100%;max-width:280px}
+ .map-screen .topbar{order:4;position:static;inset:auto;min-height:0;display:flex;justify-content:center;margin-top:auto;padding:2px 0 0}
+ .map-screen .topbar > .icon-button{display:none}
+ .map-screen .topbar .segmented{position:static;transform:none;width:100%;max-width:340px;flex:0 1 340px;gap:2px}
+ .map-screen .topbar .segmented button{min-height:44px}
+}

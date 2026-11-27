@@ -76,7 +76,10 @@ with sync_playwright() as p:
     # Dialog close glyph is geometrically centered on desktop and mobile.
     for width, height in [(390, 844), (1536, 900)]:
         page.set_viewport_size({"width": width, "height": height})
-        page.locator('#dock [data-action="map"]').click()
+        if width < 701:
+            page.locator(".mobile-back-link").click()
+        else:
+            page.locator('#dock [data-action="map"]').click()
         page.locator('[data-client="s7"]').click()
         page.locator(".empty-map").wait_for()
         assert page.locator('[data-action="play-history"]').count() == 0
@@ -85,6 +88,8 @@ with sync_playwright() as p:
         caption = page.locator(".empty-map").bounding_box()
         assert caption["y"] >= graph["y"] + graph["height"] - 1
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        if width < 701:
+            page.locator(".mobile-back-link").click()
         page.locator('#dock [data-action="settings"]').click()
         page.locator('[data-action="mg-key"]').click()
         page.locator("#dialog[open]").wait_for()
