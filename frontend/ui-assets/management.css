@@ -55,3 +55,9 @@ button.mg-row-text:disabled{opacity:.7}
 @media(min-width:701px) and (max-width:1050px){.management-screen{width:85vw}}
 @media(max-width:700px){.management-screen{width:auto;margin:0 16px;padding:25px 0 100px}.mg-grid{grid-template-columns:1fr;gap:12px}.mg-card{padding:20px}.mg-header h1{font-size:24px}.mg-card h2{font-size:20px}.mg-catalog-card{min-height:135px}.mg-detail-card,.mg-settings-card{min-height:0}.mg-statusbar{flex-wrap:wrap;gap:10px;padding:12px}.mg-statusbar .mg-pill{margin-left:0}.mg-row{min-height:64px}.mg-switch{width:42px;height:25px;padding:4px}.mg-switch span{width:17px;height:17px}.mg-switch[aria-checked=true] span{transform:translateX(17px)}.mg-footer select{max-width:65vw}.mg-access{font-size:12px}}
 @media(prefers-reduced-motion:reduce){.mg-switch,.mg-switch span,.mg-catalog-card{transition:none}}
+
+/* Same motion vocabulary as the map. No screen remount for switch changes. */
+.mg-catalog-card{transition:border-color var(--motion-ui) var(--motion-ease),background-color var(--motion-ui) var(--motion-ease)}
+.mg-switch{transition:background-color var(--motion-ui) var(--motion-ease)}
+.mg-switch span{transition:transform var(--motion-ui) var(--motion-ease)}
+.mg-row-text strong{transition:color var(--motion-fast) var(--motion-ease)}

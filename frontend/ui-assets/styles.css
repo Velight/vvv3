@@ -200,3 +200,30 @@ html::-webkit-scrollbar{display:none;width:0;height:0}
  .map-screen .topbar .segmented{position:static;transform:none;width:100%;max-width:340px;flex:0 1 340px;gap:2px}
  .map-screen .topbar .segmented button{min-height:44px}
 }
+
+/* Quiet motion: shared timings, no spring, zoom or stagger. */
+:root{--motion-fast:140ms;--motion-ui:190ms;--motion-map:300ms;--motion-ease:cubic-bezier(.333,1,.667,1)}
+button{transition:background-color var(--motion-fast) var(--motion-ease),color var(--motion-fast) var(--motion-ease),border-color var(--motion-fast) var(--motion-ease),opacity var(--motion-fast) var(--motion-ease),box-shadow var(--motion-ui) var(--motion-ease)}
+button:not(:disabled):active{transform:none}
+.client-card:hover{transform:none;box-shadow:0 3px 14px #0000000a;border-color:#0b0d1010}
+@media(hover:hover) and (pointer:fine){.client-card:hover .card-arrow{transform:translateX(2px)}}
+.card-arrow{transition:transform var(--motion-ui) var(--motion-ease)}
+.progress span{animation:none}
+@keyframes surface-enter{from{opacity:.82}to{opacity:1}}
+.clients,.map-screen,.management-screen{animation:surface-enter var(--motion-ui) var(--motion-ease) both}
+.graph .person{transition:transform var(--motion-map) var(--motion-ease),opacity var(--motion-ui) var(--motion-ease)}
+.graph .person rect,.graph .person .node-name,.graph .person .node-dept,.graph .person .person-avatar path,.graph .person .person-avatar circle{transition:fill var(--motion-fast) var(--motion-ease),stroke var(--motion-fast) var(--motion-ease),stroke-width var(--motion-fast) var(--motion-ease)}
+.graph .edge{transition:opacity var(--motion-fast) var(--motion-ease),stroke var(--motion-fast) var(--motion-ease)}
+.segmented button{transition:background-color var(--motion-ui) var(--motion-ease),color var(--motion-fast) var(--motion-ease)}
+.timeline-label{transition:color var(--motion-fast) var(--motion-ease)}
+@keyframes panel-enter{from{opacity:.88;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes shade-enter{from{opacity:0}to{opacity:1}}
+dialog[open]{animation:panel-enter var(--motion-ui) var(--motion-ease) both}
+dialog[open]::backdrop{animation:shade-enter var(--motion-ui) var(--motion-ease) both}
+.chat-log>.bubble{animation:surface-enter var(--motion-fast) var(--motion-ease) both}
+.dialog-form input,.dialog-form textarea,.dialog-form select,.scope-picker select{transition:border-color var(--motion-fast) var(--motion-ease),background-color var(--motion-fast) var(--motion-ease)}
+@media(max-width:700px){
+ .map-screen[data-mobile-panel="assistant"] .assistant-panel,.map-screen[data-mobile-panel="contact"] .contact-panel{animation:panel-enter 220ms var(--motion-ease) both}
+ .map-screen[data-mobile-panel="assistant"] .mobile-shade,.map-screen[data-mobile-panel="contact"] .mobile-shade{animation:shade-enter 180ms var(--motion-ease) both}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
