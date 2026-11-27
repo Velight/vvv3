@@ -149,7 +149,7 @@ jobs:
                   assert page.locator("#contact-panel").is_visible()
                   page.screenshot(path="ui-capture/09-mobile-contact.png")
                   page.locator("#contact-panel .panel-heading button").tap()
-                  page.locator("#contact-panel").wait_for(state="hidden")
+                  assert not page.locator("#contact-panel").is_visible()
                   page.locator('[data-action="mobile-assistant"]').tap()
                   page.locator("#chat-input").fill("Кто принимает решения?")
                   page.locator("#chat-form button[type=submit]").tap()

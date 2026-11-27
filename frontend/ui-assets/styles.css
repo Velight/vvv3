@@ -227,29 +227,3 @@ dialog[open]::backdrop{animation:shade-enter var(--motion-ui) var(--motion-ease)
  .map-screen[data-mobile-panel="assistant"] .mobile-shade,.map-screen[data-mobile-panel="contact"] .mobile-shade{animation:shade-enter 180ms var(--motion-ease) both}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
-
-/* Continuous motion: geometry is driven by one JS clock, not competing CSS transitions. */
-.graph .person{transition:opacity var(--motion-ui) var(--motion-ease)}
-.map-screen{animation:none}
-.map-screen > .graph-area,.map-screen > .mobile-map-heading{animation:surface-enter var(--motion-ui) var(--motion-ease) both}
-@media(min-width:701px){.map-screen > .panel{animation:surface-enter var(--motion-ui) var(--motion-ease) both}}
-/* Native discrete transitions keep the top layer alive just long enough to fade out.
-   Older browsers keep the existing lightweight entrance animation. */
-@supports (transition-behavior:allow-discrete){
- dialog{opacity:0;transform:translateY(6px);transition:opacity 180ms var(--motion-ease),transform 180ms var(--motion-ease),display 180ms allow-discrete,overlay 180ms allow-discrete}
- dialog[open]{opacity:1;transform:translateY(0);animation:none}
- dialog::backdrop{opacity:0;transition:opacity 180ms var(--motion-ease),display 180ms allow-discrete,overlay 180ms allow-discrete}
- dialog[open]::backdrop{opacity:1;animation:none}
- @starting-style{dialog[open]{opacity:0;transform:translateY(6px)}dialog[open]::backdrop{opacity:0}}
- @media(max-width:700px){
-  .map-screen .panel{opacity:0;transform:translateY(12px);pointer-events:none;transition:opacity 210ms var(--motion-ease),transform 240ms var(--motion-ease),display 240ms allow-discrete}
-  .map-screen[data-mobile-panel="assistant"] .assistant-panel,.map-screen[data-mobile-panel="contact"] .contact-panel{opacity:1;transform:translateY(0);pointer-events:auto;animation:none}
-  .map-screen .mobile-shade{opacity:0;pointer-events:none;transition:opacity 200ms var(--motion-ease),display 200ms allow-discrete}
-  .map-screen[data-mobile-panel="assistant"] .mobile-shade,.map-screen[data-mobile-panel="contact"] .mobile-shade{opacity:1;pointer-events:auto;animation:none}
-  @starting-style{
-   .map-screen[data-mobile-panel="assistant"] .assistant-panel,.map-screen[data-mobile-panel="contact"] .contact-panel{opacity:0;transform:translateY(12px)}
-   .map-screen[data-mobile-panel="assistant"] .mobile-shade,.map-screen[data-mobile-panel="contact"] .mobile-shade{opacity:0}
-  }
- }
-}
-@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
