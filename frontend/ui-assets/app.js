@@ -341,7 +341,7 @@ function interactions(){const list=state.detail?.interactions||[],refs=factRefs(
 
 let proposalItems=[],proposalEpoch=0;
 const proposalStatus={open:'Открыто',merged:'Принято',rejected:'Отклонено'};
-const proposalFields={name:'Имя',title:'Должность',department:'Подразделение',relationship:'Отношения',is_decision_maker:'ЛПР',communication_notes:'Особенности общения',email:'Почта',phone:'Телефон',status:'Статус',kind:'Тип связи',description:'Описание',strength:'Сила связи'};
+const proposalFields={name:'Имя',title:'Должность',department:'Подразделение',relationship:'Отношения',is_decision_maker:'ЛПР',communication_notes:'Рабочие заметки',email:'Почта',phone:'Телефон',status:'Статус',kind:'Тип связи',description:'Описание',strength:'Сила связи'};
 const proposalKinds={'contact.create':'Новый контакт','contact.update':'Правка контакта','relation.create':'Новая связь','relation.review':'Проверка связи'};
 function proposalValue(k,v){
  if(v===undefined||v===null||v==='')return 'Не указано';
@@ -349,7 +349,7 @@ function proposalValue(k,v){
  if(k==='relationship')return R[v]||v;
  if(k==='kind')return K[v]||v;
  if(typeof v==='boolean')return v?'Да':'Нет';
- return String(v);
+ return String(v).replace(/^Демонстрационный сценарий:\s*/i,'');
 }
 function proposalTag(status){return '<span class="proposal-status '+esc(status)+'">'+esc(proposalStatus[status]||status)+'</span>'}
 async function openProposals(){
@@ -362,14 +362,14 @@ async function openProposals(){
   proposalItems=r.items;
   const counts=proposalItems.filter(x=>x.status==='open').length;
   $('#dialog-content').innerHTML='<div class="proposal-intro"><p>Изменения попадут в CRM только после проверки. Каждое принятие создаёт новую версию карты.</p><span>'+counts+' открыто · '+(proposalItems.length-counts)+' рассмотрено</span></div>'+
-  (editor()&&current()?'<div class="proposal-toolbar"><button class="pill secondary" data-action="proposal-add">Новый контакт</button><button class="pill secondary" data-action="proposal-source">Добавить источник</button></div>':'<p class="fact-note">'+(!editor()?'Демонстрационный просмотр. Принимать изменения может редактор.':'Для внесения изменений вернитесь к текущей версии.')+'</p>')+
-  '<div class="proposal-list">'+(proposalItems.length?proposalItems.map(p=>'<button class="proposal-row" data-action="proposal-view:'+esc(encodeURIComponent(p.id))+'"><div class="proposal-row-top"><b>'+esc(p.title)+'</b>'+proposalTag(p.status)+'</div><span class="fact-note">'+esc(p.author)+' · '+esc(date(p.created_at))+' · '+p.changes.length+' изм.</span></button>').join(''):'<p class="muted">Нет предложений. Добавьте источник или предложите правку контакта.</p>')+'</div>';
+  (editor()&&current()?'<div class="proposal-toolbar"><button class="pill secondary" data-action="proposal-add">Новый контакт</button><button class="pill secondary" data-action="proposal-source">Добавить источник</button></div>':'<p class="fact-note">'+(!editor()?'Принимать изменения может редактор.':'Для внесения изменений вернитесь к текущей версии.')+'</p>')+
+  '<div class="proposal-list">'+(proposalItems.length?proposalItems.map(p=>'<button class="proposal-row" data-action="proposal-view:'+esc(encodeURIComponent(p.id))+'"><div class="proposal-row-top"><b>'+esc(p.title)+'</b>'+proposalTag(p.status)+'</div><span class="fact-note">'+esc(p.author)+' · '+esc(date(p.created_at))+' · '+p.changes.length+' изм.</span></button>').join(''):'<p class="muted">Нет предложений. Добавьте источник или предложите правку контакта.</p>')+'</div>'+(state.client.crm_id==='demo-'+state.client.id?'<p class="fact-note proposal-data-note">Учебные данные · не сведения о реальных сотрудниках.</p>':'');
  }catch(e){if(token===proposalEpoch&&dialog.open)$('#dialog-content').innerHTML='<p class="error">'+esc(e.message)+'</p>'}
 }
 function proposalDiff(c){
- const keys=Object.keys(c.after).filter(k=>Object.hasOwn(proposalFields,k));
+ const keys=Object.keys(c.after).filter(k=>Object.hasOwn(proposalFields,k)&&!(k==='status'&&Object.hasOwn(c.after,'description')));
  const diff=keys.map(k=>'<div class="proposal-field"><span class="fact-label">'+esc(proposalFields[k])+'</span>'+(Object.hasOwn(c.before,k)?'<div class="proposal-minus">− '+esc(proposalValue(k,c.before[k]))+'</div>':'')+'<div class="proposal-plus">+ '+esc(proposalValue(k,c.kind==='relation.create'&&k==='status'?'confirmed':c.after[k]))+'</div></div>').join('');
- return '<article class="proposal-change"><span class="fact-label">'+esc(proposalKinds[c.kind]||c.kind)+'</span><b>'+esc(c.target)+'</b>'+(c.description?'<p>'+esc(c.description)+'</p>':'')+diff+(c.source?'<div class="proposal-evidence"><span class="fact-label">Источник · '+esc(date(c.source.date))+'</span><b>'+esc(c.source.title)+'</b><blockquote>«'+esc(c.source.quote)+'»</blockquote></div>':'<p class="fact-note">Источник не указан · ручное предложение</p>')+'</article>';
+ return '<article class="proposal-change"><span class="fact-label">'+esc(proposalKinds[c.kind]||c.kind)+'</span><b>'+esc(c.target)+'</b>'+(c.description?'<p>'+esc(c.description)+'</p>':'')+diff+(c.source?'<div class="proposal-evidence"><span class="fact-label">Источник · '+esc(date(c.source.date))+'</span><b>'+esc(c.source.id===state.client.id+'-source'&&c.source.title==='Тестовый протокол встречи'?'Протокол встречи':c.source.title)+'</b><blockquote>«'+esc(c.source.quote)+'»</blockquote></div>':'<p class="fact-note">Источник не указан · ручное предложение</p>')+'</article>';
 }
 function viewProposal(id){
  const p=proposalItems.find(x=>x.id===id);if(!p)return;

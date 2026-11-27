@@ -18,6 +18,9 @@ with sync_playwright() as p:
     page.locator(".proposal-row").first.click()
     assert page.locator(".proposal-minus").count()>0
     assert page.locator(".proposal-plus").count()>0
+    assert "Согласует требования ИБ" in page.locator(".proposal-plus").all_text_contents()[0]
+    assert "Демо-агент" not in page.locator("#dialog-content").inner_text()
+    assert not any("Подтверждено" in value for value in page.locator(".proposal-plus").all_text_contents())
     assert page.locator(".proposal-evidence blockquote").count()>0
     page.screenshot(path="ui-capture/22-crm-proposal.png")
     page.locator('.dialog-head [data-close]').click()

@@ -105,7 +105,7 @@ def create_extraction(store, client_id, source_id, job_id, relations):
 
 
 def seed_demo_proposals(store):
-    """Only untouched synthetic fixtures; never publish editor-created drafts."""
+    """Populate substantive examples using existing synthetic source excerpts."""
     for s in store.all():
         if s.id not in ("krasnodar","vtb","mvideo") or s.crm_id != "demo-"+s.id:
             continue
@@ -114,21 +114,44 @@ def seed_demo_proposals(store):
         with store.connection() as db:
             db.execute("BEGIN IMMEDIATE")
             state = read_state(db, s.id)
+            source_id = state.id+"-source"
+            source = next((x for x in state.sources if x.id==source_id),None)
+            if not source:
+                continue
             changes = []
-            for r in state.relations:
-                if r.status != "proposed" or not r.evidence:
+            for suffix, quote, note in (
+                ("-p1","Николай Орлов согласует требования ИБ.","Согласует требования ИБ."),
+                ("-p2","Ирина Кузнецова ведёт закупку.","Ведёт закупку по проекту обновления защиты инфраструктуры."),
+            ):
+                p = next((x for x in state.people if x.id==state.id+suffix),None)
+                if not p or quote not in source.text or p.communication_notes==note:
                     continue
-                ev = r.evidence[0]
-                _, src = evidence(state, ev.source_id, ev.quote)
+                ev, src = evidence(state,source_id,quote)
+                changes.append({"kind":"contact.update","target_id":p.id,"target":p.name,
+                    "before":{"communication_notes":p.communication_notes},
+                    "after":{"communication_notes":note},"source":src,"evidence":ev})
+            r = next((x for x in state.relations if x.id==state.id+"-r1" and x.status=="proposed"),None)
+            quote = "Николай Орлов обсуждает требования с Ириной Кузнецовой."
+            if r and quote in source.text and any(e.source_id==source_id and e.quote==quote for e in r.evidence):
+                _, src = evidence(state,source_id,quote)
                 changes.append({"kind":"relation.review","target_id":r.id,
-                                "target":find(state.people,r.from_person_id).name+" → "+find(state.people,r.to_person_id).name,
-                                "before":{"status":"proposed"},"after":{"status":"confirmed"},
-                                "description":r.description,"source":src})
-            if changes:
-                insert(db, state, "Демо-агент", "Проверка связей из протоколов", changes[:3],
-                       proposal_id="demo-review-"+s.id, demo=True,
-                       reason="Демонстрационный набор изменений на основе синтетических источников.")
-
+                    "target":"Николай Орлов → Ирина Кузнецова",
+                    "before":{"status":"proposed","description":r.description},
+                    "after":{"status":"confirmed","description":"Согласование требований ИБ между службой безопасности и закупками"},
+                    "description":r.description,"source":src})
+            if not changes:
+                continue
+            key = "demo-review-"+state.id
+            old = db.execute("SELECT data FROM proposals WHERE id=? AND client_id=? AND demo=1",(key,state.id)).fetchone()
+            # Upgrade only the old untouched, open fixture. Never rewrite a review decision.
+            if old:
+                previous = json.loads(old[0])
+                if previous["status"]!="open" or previous["title"]!="Проверка связей из протоколов" or previous["author"]!="Демо-агент":
+                    continue
+                db.execute("DELETE FROM proposals WHERE id=? AND client_id=? AND demo=1",(key,state.id))
+            insert(db,state,"Ассистент CRM","Уточнить обязанности и взаимодействие по проекту",
+                changes,proposal_id=key,demo=True,
+                reason="В протоколе встречи зафиксированы ответственные за требования ИБ и закупку. Уточнить карточки и описание взаимодействия.")
 
 def list_proposals(store, client_id, public=False):
     with store.connection() as db:
@@ -184,6 +207,8 @@ def decide(store, client_id, proposal_id, actor, decision):
                         raise HTTPException(409,"Relation has conflicting changes")
                     check_relation(state,r)
                     r.status=c["after"]["status"]
+                    if "description" in c["after"]:
+                        r.description=c["after"]["description"]
                     r.reviewed_by=actor
                     r.updated_at=now()
                 else:

@@ -50,3 +50,9 @@ def test_demo_proposal_is_a_single_atomic_revision(tmp_path):
         assert c.get(BASE+"/history",headers=EDITOR).json()["items"][-1]["action"].startswith("proposal.merged:")
         rels=c.get(BASE+"/relations",headers=EDITOR).json()["items"]
         assert rels[0]["status"]=="confirmed"
+        assert rels[0]["description"]=="Согласование требований ИБ между службой безопасности и закупками"
+        assert any("communication_notes" in change["after"] for change in p["changes"])
+        assert all(change["source"]["quote"] for change in p["changes"])
+        people=c.get(BASE+"/people",headers=EDITOR).json()["items"]
+        assert next(x for x in people if x["id"]=="krasnodar-p1")["communication_notes"]=="Согласует требования ИБ."
+        assert next(x for x in people if x["id"]=="krasnodar-p2")["communication_notes"].startswith("Ведёт закупку")
