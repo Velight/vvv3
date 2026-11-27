@@ -19,7 +19,7 @@ def create_mcp(store, keys, *, public_demo=False):
             hosts.append(os.environ['RENDER_EXTERNAL_HOSTNAME'])
         origins += ['https://chatgpt.com', 'https://chat.openai.com', 'https://vvv3.onrender.com']
     server = FastMCP('КРОК · Демонстрационные контакты' if public_demo else 'КРОК · Контакты',
-        instructions='All data in this public demo are synthetic and do not describe real employees or business relationships.' if public_demo else None,
+        instructions='This is a read-only view of the live presentation demo CRM. Data are demonstration material and must not be presented as verified real-world relationships.' if public_demo else None,
         stateless_http=True, json_response=True,
         streamable_http_path='/', transport_security=TransportSecuritySettings(
             allowed_hosts=hosts, allowed_origins=origins))
@@ -28,11 +28,20 @@ def create_mcp(store, keys, *, public_demo=False):
     def user(ctx):
         return ctx.request_context.request.scope['krok_user']
 
+    # Only the four explicitly designated demo clients are exposed anonymously.
+    demo_ids = ('krasnodar', 'vtb', 'mvideo', 's7')
+
+    def visible_demo(state):
+        return state.id in demo_ids and state.crm_id == f'demo-{state.id}'
+
     def permitted(ctx, client_id):
         u = user(ctx)
         if '*' not in u['clients'] and client_id not in u['clients']:
             raise ValueError('Client not found')
-        return store.get(client_id)
+        state = store.get(client_id)
+        if public_demo and not visible_demo(state):
+            raise ValueError('Client not found')
+        return state
 
     @server.tool(annotations=annotations)
     def list_clients(ctx: Context, query: str = '', offset: int = 0, limit: int = 50) -> dict:
@@ -40,7 +49,7 @@ def create_mcp(store, keys, *, public_demo=False):
         u = user(ctx)
         if offset < 0 or not 1 <= limit <= 200:
             raise ValueError('Invalid pagination')
-        rows = [s for s in store.all() if ('*' in u['clients'] or s.id in u['clients']) and query.casefold() in s.name.casefold()]
+        rows = [s for s in store.all() if ('*' in u['clients'] or s.id in u['clients']) and query.casefold() in s.name.casefold() and (not public_demo or visible_demo(s))]
         return {'items': [card(s) for s in rows[offset:offset+limit]], 'total': len(rows)}
 
     @server.tool(annotations=annotations)
@@ -95,7 +104,7 @@ def create_mcp(store, keys, *, public_demo=False):
         if scope['type'] != 'http':
             return await mcp_app(scope, receive, send)
         if public_demo:
-            return await mcp_app({**scope, 'krok_user': {'user_id': 'public-demo', 'role': 'viewer', 'clients': ['*']}}, receive, send)
+            return await mcp_app({**scope, 'krok_user': {'user_id': 'public-demo', 'role': 'viewer', 'clients': list(demo_ids)}}, receive, send)
         headers = dict(scope['headers'])
         raw = headers.get(b'authorization', b'').decode()
         key = raw[7:] if raw.startswith('Bearer ') else headers.get(b'x-api-key', b'').decode()

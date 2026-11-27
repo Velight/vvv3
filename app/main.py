@@ -2,7 +2,6 @@ import asyncio
 import json
 import os
 import secrets
-from tempfile import TemporaryDirectory
 from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import Annotated, Literal
@@ -67,11 +66,8 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
     )
 
     mcp_server, mcp_app = create_mcp(f, keys)
-    # Public demo is physically isolated from the CRM and never reads uploaded sources.
-    demo_dir = TemporaryDirectory(prefix="krok-public-mcp-")
-    demo_store = Store(Path(demo_dir.name) / "synthetic.db")
-    seed(demo_store)
-    demo_server, demo_app = create_mcp(demo_store, {}, public_demo=True)
+    # The jury reads the same live demo clients as the web UI, with no write access.
+    demo_server, demo_app = create_mcp(f, {}, public_demo=True)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -102,7 +98,6 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
         description="MVP: persistent client maps, reviewable evidence, history and scoped assistant. All seed data is synthetic.",
     )
     a.state.store, a.state.ai = f, ai
-    a.state.public_demo_directory = demo_dir
     e = [
         x.strip()
         for x in os.getenv(
