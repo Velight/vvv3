@@ -130,7 +130,7 @@ def test_scopes_filters(client):
 
 def test_chat_current_context_session_acl(client):
     a = client.post(BASE + "/chat", json={"message": "Кого позвать?"}).json()
-    assert a["mode"] == "demo" and a["context_version"] == 1
+    assert a["mode"] == "analytics" and a["context_version"] == 1
     client.patch(
         BASE + "/relations/krasnodar-r1/review",
         json={

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import re
 import secrets
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -31,9 +32,10 @@ from app.models import (
 )
 from app.store import Store
 from app.seed import seed
-from app.services import find, card, graph, context, check_evidence, check_relation
-from app.ai import AI, worker
+from app.services import find, card, graph, context, check_evidence, check_relation, compare_maps
+from app.ai import AI, worker, automatic_answer, analytic_intent, AUTOMATIC_LABEL
 from app.mcp_server import create_mcp
+from app.site_knowledge import help_answer
 
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
@@ -502,14 +504,43 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
     @a.post("/api/v1/clients/{client_id}/chat", tags=["Assistant"])
     def chat(client_id: str, body: ChatRequest, user: User):
         access(client_id, user)
-        h = context(f.get(client_id, body.version), body.scope, body.scope_id)
+        intent = analytic_intent(body.message) if body.intent == "auto" else body.intent
+        target_version, from_version = body.version, body.compare_version
+        if intent == "compare" and body.intent == "auto":
+            numbers = [int(n) for n in re.findall(r"\b\d+\b", body.message)]
+            if len(numbers) > 2 or any(n < 1 for n in numbers):
+                raise HTTPException(422, "Specify one or two positive version numbers")
+            if numbers:
+                from_version = numbers[0]
+            if len(numbers) == 2:
+                target_version = numbers[1]
+        h = context(f.get(client_id, target_version), body.scope, body.scope_id)
         i = f.session(
             body.session_id, user["user_id"], client_id, body.scope, body.scope_id
         )
-        try:
-            d = ai.answer(body.message, h, i)
-        except Exception:
-            raise HTTPException(502, "Model unavailable; try again later")
+        mode = "analytics"
+        compared_version = None
+        if intent == "compare":
+            selected = f.get(client_id, h["client"]["version"])
+            previous = [r["version"] for r in f.history(client_id) if r["version"] < selected.version]
+            compared_version = from_version
+            if compared_version is None and previous:
+                compared_version = previous[-1]
+            if compared_version is None:
+                d = "Это первая сохранённая версия. Выберите другую версию для сравнения, когда она появится."
+            else:
+                d = compare_maps(f.get(client_id, compared_version), selected, body.scope, body.scope_id)
+        elif intent != "auto" or ai.mode != "llm" or help_answer(body.message, h):
+            d = automatic_answer(body.message, h, intent)
+        else:
+            try:
+                d = ai.answer(body.message, h, i)
+                mode = "llm"
+            except Exception:
+                # No exception text, endpoint, token or model payload is exposed.
+                d = "Модель недоступна. " + automatic_answer(body.message, h)
+        if mode == "analytics":
+            d = AUTOMATIC_LABEL + f"\n{h['client']['name']} · версия {h['client']['version']} · {body.scope}\n\n" + d
         j = body.session_id or uid()
         i += [
             {"role": "user", "content": body.message, "created_at": now()},
@@ -518,7 +549,8 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
         f.save_chat(j, user["user_id"], client_id, body.scope, body.scope_id, i)
         return {
             "session_id": j,
-            "mode": ai.mode,
+            "mode": mode,
+            "compare_version": compared_version,
             "answer": d,
             "context_version": h["client"]["version"],
             "citations": h["citations"],

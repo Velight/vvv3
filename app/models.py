@@ -157,6 +157,8 @@ class ClientState(ClientInput):
 
 
 class ChatRequest(Model):
+    intent: Literal["auto", "summary", "compare", "recommendations", "help"] = "auto"
+    compare_version: int | None = Field(default=None, ge=1)
     message: Annotated[str, Field(min_length=1, max_length=4000)]
     scope: Literal["client", "deal", "person"] = "client"
     scope_id: str | None = None

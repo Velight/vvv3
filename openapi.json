@@ -1787,6 +1787,30 @@
               }
             ],
             "title": "Version"
+          },
+          "intent": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "summary",
+              "compare",
+              "recommendations",
+              "help"
+            ],
+            "title": "Intent",
+            "default": "auto"
+          },
+          "compare_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compare Version"
           }
         },
         "additionalProperties": false,
