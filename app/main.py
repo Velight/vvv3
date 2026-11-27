@@ -71,6 +71,10 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
     async def lifespan(app):
         if b:
             seed(f)
+            if os.getenv("SEED_HISTORY", "true").lower() == "true":
+                from app.demo_history import seed_history
+
+                seed_history(f)
         # One worker process only. Recover unfinished extraction after a restart.
         if run_worker:
             with f.connection() as d:
@@ -130,7 +134,12 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
 
     @a.get("/api/v1/me", tags=["System"])
     def me(user: User):
-        return {**user, "assistant_mode": ai.mode, "assistant_model": ai.model, "mcp_url": "/mcp/"}
+        return {
+            **user,
+            "assistant_mode": ai.mode,
+            "assistant_model": ai.model,
+            "mcp_url": "/mcp/",
+        }
 
     @a.get("/api/v1/clients", tags=["Clients"])
     def clients(
@@ -330,7 +339,7 @@ def create_app(db_path=None, keys=None, seed_demo=None, run_worker=True, ai=None
             check_relation(s, body)
             r = Relation(
                 **body.model_dump(),
-                reviewed_by=user["user_id"] if body.status != "proposed" else None
+                reviewed_by=user["user_id"] if body.status != "proposed" else None,
             )
             s.relations.append(r)
             return r
